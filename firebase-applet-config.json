@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0420360523",
-  "appId": "1:74013905554:web:e89850cd1d3a3218ae0c4b",
-  "apiKey": "AIzaSyAC7ZTTtQC0pmc4m0JZEBN6ldzmdWJqkdk",
-  "authDomain": "gen-lang-client-0420360523.firebaseapp.com",
+  "projectId": "overtime-dbcbb",
+  "appId": "1:43828802764:web:251ffd7291579613f2be69",
+  "apiKey": "AIzaSyDU467J19EdgGLFWuPzwbQeMdrilK9o0XU",
+  "authDomain": "overtime-dbcbb.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-bb2db948-ee0d-4821-886e-bd3ee7097d3e",
-  "storageBucket": "gen-lang-client-0420360523.firebasestorage.app",
-  "messagingSenderId": "74013905554",
+  "storageBucket": "overtime-dbcbb.firebasestorage.app",
+  "messagingSenderId": "43828802764",
   "measurementId": ""
 }

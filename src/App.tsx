@@ -404,6 +404,7 @@ export default function App() {
       });
 
       // Save a claim document for each user
+      const savedClaims = [];
       for (const uid of Object.keys(groupedEntries)) {
         const userEntries = groupedEntries[uid];
         const userName = userEntries[0].userName || profile?.name || user.displayName || 'Unknown User';
@@ -435,11 +436,20 @@ export default function App() {
         };
         
         await addDoc(collection(db, 'claims'), claim);
-        
-        // Generate PDF for the user
+        savedClaims.push({ uid, claim, userName });
+      }
+      
+      // Generate PDF for the user
+      for (const { uid, claim, userName } of savedClaims) {
         const claimUser = allUsers.find(u => u.uid === uid) || profile;
         if (claimUser) {
-          generateOvertimePDF(claimUser, claim);
+          try {
+            generateOvertimePDF(claimUser, claim);
+            // Small delay to prevent browser from blocking multiple downloads
+            await new Promise(resolve => setTimeout(resolve, 500));
+          } catch (pdfError) {
+            console.error('Error generating PDF for', userName, pdfError);
+          }
         }
       }
       
