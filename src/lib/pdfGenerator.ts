@@ -13,37 +13,78 @@ export function generateOvertimePDF(user: any, claim: any) {
   // User Info
   doc.setFontSize(10);
   
+  let x = 15;
+  let y = 25;
+  
   // Line 1
   doc.setFont('helvetica', 'bold');
-  doc.text('NAME:', 15, 25);
+  let text = 'NAME:';
+  doc.text(text, x, y);
+  doc.setLineWidth(0.3);
+  doc.line(x, y + 1, x + doc.getTextWidth(text), y + 1);
+  x += doc.getTextWidth(text) + 2;
+  
   doc.setFont('helvetica', 'normal');
-  doc.text(`${(user.name || '').toUpperCase()}`, 28, 25);
+  text = `${(user.name || '').toUpperCase()}`;
+  doc.text(text, x, y);
+  x += doc.getTextWidth(text) + 5;
   
   doc.setFont('helvetica', 'bold');
-  doc.text('DESIGNATION:', 85, 25);
+  text = 'DESIGNATION:';
+  doc.text(text, x, y);
+  doc.line(x, y + 1, x + doc.getTextWidth(text), y + 1);
+  x += doc.getTextWidth(text) + 2;
+  
   doc.setFont('helvetica', 'normal');
-  doc.text(`${(user.designation || '').toUpperCase()}`, 115, 25);
+  text = `${(user.designation || '').toUpperCase()}`;
+  doc.text(text, x, y);
+  x += doc.getTextWidth(text) + 5;
   
   doc.setFont('helvetica', 'bold');
-  doc.text('DEPARTMENT:', 155, 25);
+  text = 'DEPARTMENT:';
+  doc.text(text, x, y);
+  doc.line(x, y + 1, x + doc.getTextWidth(text), y + 1);
+  x += doc.getTextWidth(text) + 2;
+  
   doc.setFont('helvetica', 'normal');
-  doc.text(`${(user.department || '').toUpperCase()}`, 185, 25);
+  text = `${(user.department || '').toUpperCase()}`;
+  doc.text(text, x, y);
   
   // Line 2
-  doc.setFont('helvetica', 'bold');
-  doc.text('MONTH OF:', 15, 32);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`${(claim.month || '').toUpperCase()} ${claim.year || ''}`, 38, 32);
+  x = 15;
+  y = 35;
   
   doc.setFont('helvetica', 'bold');
-  doc.text('PAY SCALE:', 85, 32);
+  text = 'MONTH OF:';
+  doc.text(text, x, y);
+  doc.line(x, y + 1, x + doc.getTextWidth(text), y + 1);
+  x += doc.getTextWidth(text) + 2;
+  
   doc.setFont('helvetica', 'normal');
-  doc.text(`${user.payScale || ''}`, 108, 32);
+  text = `${(claim.month || '').toUpperCase()} ${claim.year || ''}`;
+  doc.text(text, x, y);
+  x += doc.getTextWidth(text) + 5;
   
   doc.setFont('helvetica', 'bold');
-  doc.text('BANK A/C NO:', 125, 32);
+  text = 'PAY SCALE:';
+  doc.text(text, x, y);
+  doc.line(x, y + 1, x + doc.getTextWidth(text), y + 1);
+  x += doc.getTextWidth(text) + 2;
+  
   doc.setFont('helvetica', 'normal');
-  doc.text(`${user.bankAccount || ''} ${(user.bankName || '').toUpperCase()}`, 152, 32);
+  text = `${user.payScale || ''}`;
+  doc.text(text, x, y);
+  x += doc.getTextWidth(text) + 5;
+  
+  doc.setFont('helvetica', 'bold');
+  text = 'BANK A/C NO:';
+  doc.text(text, x, y);
+  doc.line(x, y + 1, x + doc.getTextWidth(text), y + 1);
+  x += doc.getTextWidth(text) + 2;
+  
+  doc.setFont('helvetica', 'normal');
+  text = `${user.bankAccount || ''} ${(user.bankName || '').toUpperCase()}`;
+  doc.text(text, x, y);
   
   // Table
   const tableData = claim.entries.map((entry: any) => [
@@ -56,13 +97,8 @@ export function generateOvertimePDF(user: any, claim: any) {
     entry.amount
   ]);
   
-  // Fill empty rows to match the sample look
-  while (tableData.length < 15) {
-    tableData.push(['', '', '', '', '', '', '']);
-  }
-  
   autoTable(doc, {
-    startY: 40,
+    startY: 45,
     head: [
       [
         { content: 'DATE', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
@@ -79,8 +115,8 @@ export function generateOvertimePDF(user: any, claim: any) {
     ],
     body: tableData,
     theme: 'grid',
-    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineWidth: 0.1, lineColor: [0, 0, 0] },
-    styles: { fontSize: 9, cellPadding: 2, lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0] },
+    headStyles: { font: 'helvetica', fillColor: [255, 255, 255], textColor: [0, 0, 0], lineWidth: 0.1, lineColor: [0, 0, 0] },
+    styles: { font: 'helvetica', fontSize: 9, cellPadding: 2, lineColor: [0, 0, 0], lineWidth: 0.1, textColor: [0, 0, 0] },
     columnStyles: {
       0: { cellWidth: 22, halign: 'center' },
       1: { cellWidth: 22, halign: 'center' },
@@ -92,10 +128,10 @@ export function generateOvertimePDF(user: any, claim: any) {
     },
     foot: [[
       { content: 'TOTAL HOURS & AMOUNT', colSpan: 5, styles: { halign: 'center', fontStyle: 'bold' } },
-      { content: claim.totalHours.toString(), styles: { halign: 'center', fontStyle: 'normal' } },
-      { content: claim.totalAmount.toString(), styles: { halign: 'center', fontStyle: 'normal' } }
+      { content: claim.totalHours.toString(), styles: { halign: 'center', fontStyle: 'bold' } },
+      { content: claim.totalAmount.toString(), styles: { halign: 'center', fontStyle: 'bold' } }
     ]],
-    footStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], lineWidth: 0.1, lineColor: [0, 0, 0] }
+    footStyles: { font: 'helvetica', fillColor: [255, 255, 255], textColor: [0, 0, 0], lineWidth: 0.1, lineColor: [0, 0, 0] }
   });
   
   const finalY = (doc as any).lastAutoTable.finalY || 150;
