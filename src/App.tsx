@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db, loginWithEmail, logout } from './firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, deleteDoc, updateDoc, getDocFromCache, getDocFromServer } from 'firebase/firestore';
 import { Plus, Download, History, LogOut, User as UserIcon, FileText, Trash2, Calendar, Clock, DollarSign, Shield, Users, CheckCircle, XCircle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -45,6 +45,7 @@ interface SelectedUserTime {
   date: string;
   fromTime: string;
   toTime: string;
+  isGazettedHoliday?: boolean;
 }
 
 interface OvertimeClaim {
@@ -115,27 +116,20 @@ const Badge = ({ children, variant = 'gray' }: any) => {
 };
 
 export default function App() {
-  const [user, setUser] = useState<any>({ uid: 'direct-access-uid', email: ADMIN_EMAIL, displayName: 'Direct Access Admin' });
-  const [profile, setProfile] = useState<UserProfile | null>({
-    uid: 'direct-access-uid',
-    name: 'Direct Access Admin',
-    email: ADMIN_EMAIL,
-    designation: 'Super Admin',
-    department: 'All',
-    payScale: 'N/A',
-    bankAccount: 'N/A',
-    bankName: 'N/A',
-    role: 'admin'
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [claims, setClaims] = useState<OvertimeClaim[]>([]);
   const [allClaims, setAllClaims] = useState<OvertimeClaim[]>([]);
   const [allowedUsers, setAllowedUsers] = useState<AllowedUser[]>([]);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [view, setView] = useState<'form' | 'history' | 'profile' | 'admin_users' | 'admin_claims'>('form');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [isAllowed, setIsAllowed] = useState(true);
   const [dbConnected, setDbConnected] = useState<boolean | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Form State
   const [selectedUserTimes, setSelectedUserTimes] = useState<SelectedUserTime[]>([]);
@@ -145,8 +139,7 @@ export default function App() {
   const [entries, setEntries] = useState<OvertimeEntry[]>([]);
   const [newEntry, setNewEntry] = useState<Partial<OvertimeEntry>>({
     date: '',
-    natureOfDuty: 'Preparation and Conduct of exam',
-    isGazettedHoliday: false
+    natureOfDuty: 'Preparation and Conduct of exam'
   });
 
   // Admin State
@@ -163,7 +156,51 @@ export default function App() {
   const [isAdminCreating, setIsAdminCreating] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
 
-  const isAdmin = true;
+  const isAdmin = profile?.role === 'admin';
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        // Fetch user profile
+        const unsubProfile = onSnapshot(doc(db, 'users', currentUser.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            setProfile(docSnap.data() as UserProfile);
+            setIsAllowed(true);
+          } else {
+            // Check if they are in allowed_users
+            getDoc(doc(db, 'allowed_users', currentUser.email!.toLowerCase())).then(allowedSnap => {
+              if (allowedSnap.exists() || currentUser.email === ADMIN_EMAIL) {
+                // Auto-create profile
+                const newProfile: UserProfile = {
+                  uid: currentUser.uid,
+                  name: currentUser.displayName || currentUser.email!.split('@')[0],
+                  email: currentUser.email!,
+                  designation: '',
+                  department: '',
+                  payScale: '',
+                  bankAccount: '',
+                  bankName: '',
+                  role: currentUser.email === ADMIN_EMAIL ? 'admin' : 'user'
+                };
+                setDoc(doc(db, 'users', currentUser.uid), newProfile);
+                setProfile(newProfile);
+                setIsAllowed(true);
+              } else {
+                setIsAllowed(false);
+              }
+            });
+          }
+        });
+        setLoading(false);
+        return () => unsubProfile();
+      } else {
+        setProfile(null);
+        setLoading(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     async function testConnection() {
@@ -183,8 +220,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
+
     // Fetch User Claims
-    const q = query(collection(db, 'claims'), where('uid', '==', 'direct-access-uid'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'claims'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'));
     const unsubClaims = onSnapshot(q, (snapshot) => {
       setClaims(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as OvertimeClaim)));
     }, (error) => {
@@ -218,7 +257,29 @@ export default function App() {
       unsubUsers();
       unsubAllUsers();
     };
-  }, []);
+  }, [user]);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setIsLoggingIn(true);
+    try {
+      await loginWithEmail(loginEmail, loginPassword);
+    } catch (error: any) {
+      if ((error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') && loginEmail === ADMIN_EMAIL) {
+        try {
+          // Auto-create admin if it doesn't exist
+          await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
+        } catch (createError: any) {
+          setAuthError(createError.message);
+        }
+      } else {
+        setAuthError(error.message || 'Failed to login. Please check your credentials.');
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   const handleAdminCreateUser = async () => {
     if (!newUserEmail || !newUserName) return;
@@ -366,7 +427,7 @@ export default function App() {
         weekend: selectedUser?.weekendRate || 160,
         holiday: selectedUser?.holidayRate || 200
       };
-      const amount = calculateAmount(hours, day, !!newEntry.isGazettedHoliday, rates);
+      const amount = calculateAmount(hours, day, !!su.isGazettedHoliday, rates);
       
       return {
         userId: su.uid,
@@ -378,7 +439,7 @@ export default function App() {
         toTime: su.toTime,
         hours,
         amount,
-        isGazettedHoliday: !!newEntry.isGazettedHoliday
+        isGazettedHoliday: !!su.isGazettedHoliday
       };
     });
     
@@ -470,6 +531,79 @@ export default function App() {
 
   if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
 
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full">
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white mb-4 shadow-lg shadow-blue-200">
+              <FileText className="w-8 h-8" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">Bahria University</h1>
+            <p className="text-sm text-gray-500 uppercase tracking-wider mt-1">Overtime Claim System</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            {authError && (
+              <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100">
+                {authError}
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+              <input
+                type="email"
+                required
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                placeholder="Enter your email"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <input
+                type="password"
+                required
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                placeholder="Enter your password"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isLoggingIn}
+              className="w-full bg-blue-600 text-white py-3 rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 mt-6 shadow-lg shadow-blue-200"
+            >
+              {isLoggingIn ? 'Signing in...' : 'Sign In'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAllowed) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-red-600 mx-auto mb-4">
+            <Shield className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h2>
+          <p className="text-gray-600 mb-6">Your email ({user.email}) is not authorized to access this system. Please contact the administrator.</p>
+          <button
+            onClick={() => auth.signOut()}
+            className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
@@ -487,11 +621,17 @@ export default function App() {
         <div className="flex items-center gap-4">
           <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full">
             <div className="w-6 h-6 rounded-full bg-blue-200 flex items-center justify-center text-blue-700 text-xs font-bold">
-              {user.displayName?.[0] || 'A'}
+              {user.displayName?.[0] || user.email?.[0]?.toUpperCase() || 'U'}
             </div>
-            <span className="text-sm font-medium text-gray-700">{user.displayName}</span>
+            <span className="text-sm font-medium text-gray-700">{user.displayName || user.email?.split('@')[0]}</span>
             {isAdmin && <Badge variant="blue">Admin</Badge>}
           </div>
+          <button
+            onClick={() => auth.signOut()}
+            className="text-sm font-medium text-red-600 hover:text-red-700 px-3 py-1 rounded-lg hover:bg-red-50 transition-colors"
+          >
+            Sign Out
+          </button>
         </div>
       </header>
 
@@ -841,14 +981,15 @@ export default function App() {
                             setSelectedDates(newDates);
                             
                             // Add rows for existing unique users
-                            const uniqueUsers = Array.from(new Map(selectedUserTimes.map(su => [su.uid, { uid: su.uid, name: su.name, designation: su.designation }])).values());
+                            const uniqueUsers = Array.from(new Map<string, { uid: string, name: string, designation: string }>(selectedUserTimes.map(su => [su.uid, { uid: su.uid, name: su.name, designation: su.designation }])).values());
                             const newRows = uniqueUsers.map(u => ({
                               uid: u.uid,
                               name: u.name,
                               designation: u.designation,
                               date: v,
                               fromTime: '18:30',
-                              toTime: '19:30'
+                              toTime: '19:30',
+                              isGazettedHoliday: false
                             }));
                             setSelectedUserTimes([...selectedUserTimes, ...newRows]);
                           }
@@ -872,16 +1013,6 @@ export default function App() {
                       )}
                     </div>
                     <Input label="Nature of Duty (Common)" value={newEntry.natureOfDuty} onChange={(v: string) => setNewEntry({ ...newEntry, natureOfDuty: v })} />
-                    <div className="flex items-center gap-2 h-10 px-2 mt-6">
-                      <input 
-                        type="checkbox" 
-                        id="gazetted" 
-                        checked={newEntry.isGazettedHoliday} 
-                        onChange={(e) => setNewEntry({ ...newEntry, isGazettedHoliday: e.target.checked })}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <label htmlFor="gazetted" className="text-xs font-medium text-gray-600">Gazetted Holiday</label>
-                    </div>
                   </div>
 
                   {/* User Specific Data */}
@@ -907,7 +1038,8 @@ export default function App() {
                               designation: user.designation,
                               date: date,
                               fromTime: '18:30',
-                              toTime: '19:30'
+                              toTime: '19:30',
+                              isGazettedHoliday: false
                             }));
                             setSelectedUserTimes([...selectedUserTimes, ...newRows]);
                           }
@@ -929,6 +1061,7 @@ export default function App() {
                               <th className="px-4 py-3 w-32">Date</th>
                               <th className="px-4 py-3 w-32">From Time</th>
                               <th className="px-4 py-3 w-32">To Time</th>
+                              <th className="px-4 py-3 w-24 text-center">Gazetted</th>
                               <th className="px-4 py-3 w-10"></th>
                             </tr>
                           </thead>
@@ -950,6 +1083,18 @@ export default function App() {
                                     newArr[idx].toTime = e.target.value;
                                     setSelectedUserTimes(newArr);
                                   }} />
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={!!su.isGazettedHoliday} 
+                                    onChange={e => {
+                                      const newArr = [...selectedUserTimes];
+                                      newArr[idx].isGazettedHoliday = e.target.checked;
+                                      setSelectedUserTimes(newArr);
+                                    }}
+                                    className="w-4 h-4 text-blue-600 rounded"
+                                  />
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                   <button onClick={() => {
@@ -987,7 +1132,7 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {Object.entries(
+                        {Object.entries<OvertimeEntry[]>(
                           entries.reduce((acc, entry) => {
                             const uid = entry.userId || 'unknown';
                             if (!acc[uid]) acc[uid] = [];
