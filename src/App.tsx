@@ -38,6 +38,14 @@ interface OvertimeEntry {
   isGazettedHoliday: boolean;
 }
 
+interface SelectedUserTime {
+  uid: string;
+  name: string;
+  designation: string;
+  fromTime: string;
+  toTime: string;
+}
+
 interface OvertimeClaim {
   id?: string;
   uid: string;
@@ -129,7 +137,7 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
 
   // Form State
-  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [selectedUserTimes, setSelectedUserTimes] = useState<SelectedUserTime[]>([]);
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [month, setMonth] = useState(new Date().toLocaleString('default', { month: 'short' }).toUpperCase());
   const [year, setYear] = useState(new Date().getFullYear());
@@ -137,8 +145,6 @@ export default function App() {
   const [newEntry, setNewEntry] = useState<Partial<OvertimeEntry>>({
     date: '',
     natureOfDuty: 'Preparation and Conduct of exam',
-    fromTime: '18:30',
-    toTime: '19:30',
     isGazettedHoliday: false
   });
 
@@ -154,6 +160,7 @@ export default function App() {
   const [newUserWeekendRate, setNewUserWeekendRate] = useState(160);
   const [newUserHolidayRate, setNewUserHolidayRate] = useState(200);
   const [isAdminCreating, setIsAdminCreating] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
 
   const isAdmin = true;
 
@@ -216,9 +223,7 @@ export default function App() {
     if (!newUserEmail || !newUserName) return;
     setIsAdminCreating(true);
     try {
-      const newUserRef = doc(collection(db, 'users'));
-      await setDoc(newUserRef, {
-        uid: newUserRef.id,
+      const userData = {
         name: newUserName,
         email: newUserEmail,
         designation: newUserDesignation,
@@ -230,27 +235,94 @@ export default function App() {
         weekdayRate: newUserWeekdayRate,
         weekendRate: newUserWeekendRate,
         holidayRate: newUserHolidayRate
-      });
-      
-      // Also add to allowed_users
-      await setDoc(doc(db, 'allowed_users', newUserEmail.toLowerCase()), {
-        email: newUserEmail.toLowerCase(),
-        addedAt: serverTimestamp()
-      });
+      };
 
+      if (editingUserId) {
+        await updateDoc(doc(db, 'users', editingUserId), userData);
+        
+        const oldUser = allUsers.find(u => u.uid === editingUserId);
+        if (oldUser && oldUser.email !== newUserEmail) {
+          await deleteDoc(doc(db, 'allowed_users', oldUser.email.toLowerCase()));
+          await setDoc(doc(db, 'allowed_users', newUserEmail.toLowerCase()), {
+            email: newUserEmail.toLowerCase(),
+            addedAt: serverTimestamp()
+          });
+        }
+        
+        alert('User updated successfully!');
+      } else {
+        const newUserRef = doc(collection(db, 'users'));
+        await setDoc(newUserRef, {
+          ...userData,
+          uid: newUserRef.id
+        });
+        
+        // Also add to allowed_users
+        await setDoc(doc(db, 'allowed_users', newUserEmail.toLowerCase()), {
+          email: newUserEmail.toLowerCase(),
+          addedAt: serverTimestamp()
+        });
+        alert('User created successfully!');
+      }
+
+      setEditingUserId(null);
       setNewUserEmail('');
       setNewUserName('');
       setNewUserDesignation('');
       setNewUserDepartment('');
+      setNewUserPayScale('');
+      setNewUserBankAccount('');
+      setNewUserBankName('');
       setNewUserWeekdayRate(120);
       setNewUserWeekendRate(160);
       setNewUserHolidayRate(200);
-      alert('User created successfully!');
     } catch (error: any) {
-      console.error('Error creating user:', error);
+      console.error('Error saving user:', error);
       alert('Error: ' + error.message);
     } finally {
       setIsAdminCreating(false);
+    }
+  };
+
+  const handleEditUser = (user: UserProfile) => {
+    setEditingUserId(user.uid);
+    setNewUserName(user.name || '');
+    setNewUserEmail(user.email || '');
+    setNewUserDesignation(user.designation || '');
+    setNewUserDepartment(user.department || '');
+    setNewUserPayScale(user.payScale || '');
+    setNewUserBankAccount(user.bankAccount || '');
+    setNewUserBankName(user.bankName || '');
+    setNewUserWeekdayRate(user.weekdayRate || 120);
+    setNewUserWeekendRate(user.weekendRate || 160);
+    setNewUserHolidayRate(user.holidayRate || 200);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingUserId(null);
+    setNewUserEmail('');
+    setNewUserName('');
+    setNewUserDesignation('');
+    setNewUserDepartment('');
+    setNewUserPayScale('');
+    setNewUserBankAccount('');
+    setNewUserBankName('');
+    setNewUserWeekdayRate(120);
+    setNewUserWeekendRate(160);
+    setNewUserHolidayRate(200);
+  };
+
+  const handleDeleteUser = async (uid: string, email: string) => {
+    if (window.confirm('Are you sure you want to delete this user?')) {
+      try {
+        await deleteDoc(doc(db, 'users', uid));
+        await deleteDoc(doc(db, 'allowed_users', email.toLowerCase()));
+        alert('User deleted successfully!');
+      } catch (error: any) {
+        console.error('Error deleting user:', error);
+        alert('Failed to delete user.');
+      }
     }
   };
 
@@ -272,43 +344,51 @@ export default function App() {
   };
 
   const handleAddEntry = () => {
-    if (selectedDates.length === 0 || !newEntry.fromTime || !newEntry.toTime || !selectedUserId) {
-      alert("Please fill all required fields, including selecting at least one date and a user.");
+    if (selectedDates.length === 0 || selectedUserTimes.length === 0) {
+      alert("Please fill all required fields, including selecting at least one date and one user.");
       return;
     }
+
+    for (const su of selectedUserTimes) {
+      if (!su.fromTime || !su.toTime) {
+        alert(`Please fill times for ${su.name}`);
+        return;
+      }
+    }
     
-    const hours = calculateHours(newEntry.fromTime as string, newEntry.toTime as string);
-    
-    // Determine rates based on selected user or fallback to defaults
-    const selectedUser = allUsers.find(u => u.uid === selectedUserId);
-    const rates = {
-      weekday: selectedUser?.weekdayRate || 120,
-      weekend: selectedUser?.weekendRate || 160,
-      holiday: selectedUser?.holidayRate || 200
-    };
-    
-    const newEntries = selectedDates.map(date => {
+    const newEntries: OvertimeEntry[] = [];
+
+    selectedDates.forEach(date => {
       const day = getDayName(date);
-      const amount = calculateAmount(hours, day, !!newEntry.isGazettedHoliday, rates);
       
-      return {
-        userId: selectedUserId,
-        userName: selectedUser?.name || 'Unknown User',
-        date,
-        day,
-        natureOfDuty: newEntry.natureOfDuty || '',
-        fromTime: newEntry.fromTime as string,
-        toTime: newEntry.toTime as string,
-        hours,
-        amount,
-        isGazettedHoliday: !!newEntry.isGazettedHoliday
-      };
+      selectedUserTimes.forEach(su => {
+        const hours = calculateHours(su.fromTime, su.toTime);
+        const selectedUser = allUsers.find(u => u.uid === su.uid);
+        const rates = {
+          weekday: selectedUser?.weekdayRate || 120,
+          weekend: selectedUser?.weekendRate || 160,
+          holiday: selectedUser?.holidayRate || 200
+        };
+        const amount = calculateAmount(hours, day, !!newEntry.isGazettedHoliday, rates);
+        
+        newEntries.push({
+          userId: su.uid,
+          userName: su.name,
+          date,
+          day,
+          natureOfDuty: newEntry.natureOfDuty || '',
+          fromTime: su.fromTime,
+          toTime: su.toTime,
+          hours,
+          amount,
+          isGazettedHoliday: !!newEntry.isGazettedHoliday
+        });
+      });
     });
     
     setEntries([...entries, ...newEntries]);
-    // Clear only time and user, keep dates and duty for easy bulk entry
-    setNewEntry({ ...newEntry, fromTime: '', toTime: '' });
-    setSelectedUserId('');
+    // Clear only users, keep dates and duty for easy bulk entry
+    setSelectedUserTimes([]);
   };
 
   const handleRemoveEntry = (index: number) => {
@@ -468,8 +548,8 @@ export default function App() {
                 className="flex flex-col gap-6"
               >
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                  <h2 className="text-xl font-bold mb-4">Create New User</h2>
-                  <p className="text-sm text-gray-500 mb-6">Create a new staff account with email and password.</p>
+                  <h2 className="text-xl font-bold mb-4">{editingUserId ? 'Edit User' : 'Create New User'}</h2>
+                  <p className="text-sm text-gray-500 mb-6">{editingUserId ? 'Update staff account details.' : 'Create a new staff account with email and password.'}</p>
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <Input 
@@ -536,9 +616,61 @@ export default function App() {
                       onChange={(v: string) => setNewUserHolidayRate(Number(v))}
                     />
                   </div>
-                  <Button onClick={handleAdminCreateUser} disabled={isAdminCreating} className="w-full md:w-auto">
-                    {isAdminCreating ? 'Creating...' : 'Create User Account'}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button onClick={handleAdminCreateUser} disabled={isAdminCreating} className="w-full md:w-auto">
+                      {isAdminCreating ? 'Saving...' : (editingUserId ? 'Update User Account' : 'Create User Account')}
+                    </Button>
+                    {editingUserId && (
+                      <button onClick={handleCancelEdit} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl font-medium transition-colors">
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="p-6 border-b border-gray-100">
+                    <h2 className="text-xl font-bold">Registered Staff Members</h2>
+                    <p className="text-sm text-gray-500">Manage all registered staff members.</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead className="bg-gray-50 text-gray-600 uppercase text-xs font-bold">
+                        <tr>
+                          <th className="px-6 py-4">Name</th>
+                          <th className="px-6 py-4">Email</th>
+                          <th className="px-6 py-4">Designation</th>
+                          <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {allUsers.map((u) => (
+                          <tr key={u.uid} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 font-medium">{u.name}</td>
+                            <td className="px-6 py-4 text-gray-500">{u.email}</td>
+                            <td className="px-6 py-4 text-gray-500">{u.designation}</td>
+                            <td className="px-6 py-4 text-right">
+                              {u.email !== ADMIN_EMAIL && (
+                                <div className="flex items-center justify-end gap-2">
+                                  <button onClick={() => handleEditUser(u)} className="text-blue-500 hover:text-blue-700 p-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                                  </button>
+                                  <button onClick={() => handleDeleteUser(u.uid, u.email)} className="text-red-400 hover:text-red-600 p-1">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        {allUsers.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="px-6 py-12 text-center text-gray-400 italic">No staff members registered yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
@@ -714,22 +846,75 @@ export default function App() {
                   </div>
 
                   {/* User Specific Data */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                    <div className="col-span-2">
-                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Select User</label>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-2">
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Add User</label>
                       <select 
-                        className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
-                        value={selectedUserId}
-                        onChange={(e) => setSelectedUserId(e.target.value)}
+                        className="w-full md:w-1/2 px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+                        value=""
+                        onChange={(e) => {
+                          const uid = e.target.value;
+                          if (!uid) return;
+                          if (selectedUserTimes.find(su => su.uid === uid)) return;
+                          const user = allUsers.find(u => u.uid === uid);
+                          if (user) {
+                            setSelectedUserTimes([...selectedUserTimes, {
+                              uid: user.uid,
+                              name: user.name,
+                              designation: user.designation,
+                              fromTime: '18:30',
+                              toTime: '19:30'
+                            }]);
+                          }
+                        }}
                       >
-                        <option value="">Select a user...</option>
+                        <option value="">Select a user to add...</option>
                         {allUsers.map(u => (
                           <option key={u.uid} value={u.uid}>{u.name} ({u.designation})</option>
                         ))}
                       </select>
                     </div>
-                    <Input label="From Time" type="time" value={newEntry.fromTime} onChange={(v: string) => setNewEntry({ ...newEntry, fromTime: v })} />
-                    <Input label="To Time" type="time" value={newEntry.toTime} onChange={(v: string) => setNewEntry({ ...newEntry, toTime: v })} />
+
+                    {selectedUserTimes.length > 0 && (
+                      <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
+                        <table className="w-full text-sm text-left">
+                          <thead className="bg-gray-100 text-gray-600 uppercase text-xs font-bold">
+                            <tr>
+                              <th className="px-4 py-3">User</th>
+                              <th className="px-4 py-3 w-32">From Time</th>
+                              <th className="px-4 py-3 w-32">To Time</th>
+                              <th className="px-4 py-3 w-10"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {selectedUserTimes.map((su, idx) => (
+                              <tr key={su.uid} className="bg-white">
+                                <td className="px-4 py-3 font-medium text-blue-700">{su.name} <span className="text-xs text-gray-500 font-normal block">{su.designation}</span></td>
+                                <td className="px-4 py-3">
+                                  <input type="time" className="w-full px-2 py-1 border rounded" value={su.fromTime} onChange={e => {
+                                    const newArr = [...selectedUserTimes];
+                                    newArr[idx].fromTime = e.target.value;
+                                    setSelectedUserTimes(newArr);
+                                  }} />
+                                </td>
+                                <td className="px-4 py-3">
+                                  <input type="time" className="w-full px-2 py-1 border rounded" value={su.toTime} onChange={e => {
+                                    const newArr = [...selectedUserTimes];
+                                    newArr[idx].toTime = e.target.value;
+                                    setSelectedUserTimes(newArr);
+                                  }} />
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <button onClick={() => setSelectedUserTimes(selectedUserTimes.filter(u => u.uid !== su.uid))} className="text-red-400 hover:text-red-600 p-1">
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                   <Button onClick={handleAddEntry} className="mt-6 w-full">Add to List</Button>
                 </div>
