@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { numberToWords } from './utils';
 
 export function generateOvertimePDF(user: any, claim: any) {
@@ -36,7 +36,7 @@ export function generateOvertimePDF(user: any, claim: any) {
     tableData.push(['', '', '', '', '', '', '']);
   }
   
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: 40,
     head: [['DATE', 'DAY', 'NATURE OF DUTY', 'RFID TIMING FROM', 'RFID TIMING TO', 'HRS', 'AMOUNT']],
     body: tableData,
