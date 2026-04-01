@@ -41,8 +41,8 @@ export function calculateHours(from: string, to: string): number {
   return parseFloat((diff / 60).toFixed(2));
 }
 
-export function calculateAmount(hours: number, day: string, isGazetted: boolean): number {
-  if (isGazetted) return hours * 200;
-  if (day === 'Saturday' || day === 'Sunday') return hours * 160;
-  return hours * 120;
+export function calculateAmount(hours: number, day: string, isGazetted: boolean, rates: { weekday: number, weekend: number, holiday: number }): number {
+  if (isGazetted) return hours * rates.holiday;
+  if (day === 'Saturday' || day === 'Sunday') return hours * rates.weekend;
+  return hours * rates.weekday;
 }

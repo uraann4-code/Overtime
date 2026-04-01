@@ -20,9 +20,14 @@ interface UserProfile {
   bankAccount: string;
   bankName: string;
   role?: 'admin' | 'user';
+  weekdayRate?: number;
+  weekendRate?: number;
+  holidayRate?: number;
 }
 
 interface OvertimeEntry {
+  userId?: string;
+  userName?: string;
   date: string;
   day: string;
   natureOfDuty: string;
@@ -116,6 +121,7 @@ export default function App() {
   const [claims, setClaims] = useState<OvertimeClaim[]>([]);
   const [allClaims, setAllClaims] = useState<OvertimeClaim[]>([]);
   const [allowedUsers, setAllowedUsers] = useState<AllowedUser[]>([]);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [view, setView] = useState<'form' | 'history' | 'profile' | 'admin_users' | 'admin_claims'>('form');
   const [loading, setLoading] = useState(false);
   const [isAllowed, setIsAllowed] = useState(true);
@@ -123,6 +129,7 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
 
   // Form State
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [month, setMonth] = useState(new Date().toLocaleString('default', { month: 'short' }).toUpperCase());
   const [year, setYear] = useState(new Date().getFullYear());
   const [entries, setEntries] = useState<OvertimeEntry[]>([]);
@@ -136,9 +143,15 @@ export default function App() {
 
   // Admin State
   const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserName, setNewUserName] = useState('');
-  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [newUserDesignation, setNewUserDesignation] = useState('');
+  const [newUserDepartment, setNewUserDepartment] = useState('');
+  const [newUserPayScale, setNewUserPayScale] = useState('');
+  const [newUserBankAccount, setNewUserBankAccount] = useState('');
+  const [newUserBankName, setNewUserBankName] = useState('');
+  const [newUserWeekdayRate, setNewUserWeekdayRate] = useState(120);
+  const [newUserWeekendRate, setNewUserWeekendRate] = useState(160);
+  const [newUserHolidayRate, setNewUserHolidayRate] = useState(200);
   const [isAdminCreating, setIsAdminCreating] = useState(false);
 
   const isAdmin = true;
@@ -183,33 +196,41 @@ export default function App() {
       console.error("Error fetching allowed users:", error);
     });
 
+    // Fetch All Users
+    const unsubAllUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+      setAllUsers(snapshot.docs.map(d => ({ ...d.data(), uid: d.id } as UserProfile)));
+    }, (error) => {
+      console.error("Error fetching all users:", error);
+    });
+
     return () => {
       unsubClaims();
       unsubAllClaims();
       unsubUsers();
+      unsubAllUsers();
     };
   }, []);
 
   const handleAdminCreateUser = async () => {
-    if (!newUserEmail || !newUserPassword || !newUserName) return;
+    if (!newUserEmail || !newUserName) return;
     setIsAdminCreating(true);
     try {
-      const response = await fetch('/api/admin/create-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: newUserEmail,
-          password: newUserPassword,
-          displayName: newUserName,
-          adminEmail: user?.email // Current admin email for verification
-        })
+      const newUserRef = doc(collection(db, 'users'));
+      await setDoc(newUserRef, {
+        uid: newUserRef.id,
+        name: newUserName,
+        email: newUserEmail,
+        designation: newUserDesignation,
+        department: newUserDepartment,
+        payScale: newUserPayScale,
+        bankAccount: newUserBankAccount,
+        bankName: newUserBankName,
+        role: 'user',
+        weekdayRate: newUserWeekdayRate,
+        weekendRate: newUserWeekendRate,
+        holidayRate: newUserHolidayRate
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create user');
-      }
-
       // Also add to allowed_users
       await setDoc(doc(db, 'allowed_users', newUserEmail.toLowerCase()), {
         email: newUserEmail.toLowerCase(),
@@ -217,8 +238,12 @@ export default function App() {
       });
 
       setNewUserEmail('');
-      setNewUserPassword('');
       setNewUserName('');
+      setNewUserDesignation('');
+      setNewUserDepartment('');
+      setNewUserWeekdayRate(120);
+      setNewUserWeekendRate(160);
+      setNewUserHolidayRate(200);
       alert('User created successfully!');
     } catch (error: any) {
       console.error('Error creating user:', error);
@@ -246,13 +271,27 @@ export default function App() {
   };
 
   const handleAddEntry = () => {
-    if (!newEntry.date || !newEntry.fromTime || !newEntry.toTime) return;
+    if (!newEntry.date || !newEntry.fromTime || !newEntry.toTime || !selectedUserId) {
+      alert("Please fill all required fields, including selecting a user.");
+      return;
+    }
     
     const day = getDayName(newEntry.date as string);
     const hours = calculateHours(newEntry.fromTime as string, newEntry.toTime as string);
-    const amount = calculateAmount(hours, day, !!newEntry.isGazettedHoliday);
+    
+    // Determine rates based on selected user or fallback to defaults
+    const selectedUser = allUsers.find(u => u.uid === selectedUserId);
+    const rates = {
+      weekday: selectedUser?.weekdayRate || 120,
+      weekend: selectedUser?.weekendRate || 160,
+      holiday: selectedUser?.holidayRate || 200
+    };
+    
+    const amount = calculateAmount(hours, day, !!newEntry.isGazettedHoliday, rates);
     
     const entry: OvertimeEntry = {
+      userId: selectedUserId,
+      userName: selectedUser?.name || 'Unknown User',
       date: newEntry.date as string,
       day,
       natureOfDuty: newEntry.natureOfDuty || '',
@@ -264,7 +303,9 @@ export default function App() {
     };
     
     setEntries([...entries, entry]);
-    setNewEntry({ ...newEntry, date: '' });
+    // Clear only time and user, keep date and duty for easy bulk entry
+    setNewEntry({ ...newEntry, fromTime: '', toTime: '' });
+    setSelectedUserId('');
   };
 
   const handleRemoveEntry = (index: number) => {
@@ -274,27 +315,44 @@ export default function App() {
   const handleSaveClaim = async () => {
     if (!user || entries.length === 0) return;
     
-    const totalHours = entries.reduce((sum, e) => sum + e.hours, 0);
-    const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
-    
-    const claim: OvertimeClaim = {
-      uid: user.uid,
-      userName: profile?.name || user.displayName || 'Unknown User',
-      month,
-      year,
-      entries,
-      totalHours,
-      totalAmount,
-      createdAt: serverTimestamp(),
-      status: 'pending'
-    };
-    
     try {
-      await addDoc(collection(db, 'claims'), claim);
+      // Group entries by user
+      const groupedEntries: { [key: string]: OvertimeEntry[] } = {};
+      entries.forEach(entry => {
+        const uid = entry.userId || user.uid;
+        if (!groupedEntries[uid]) groupedEntries[uid] = [];
+        groupedEntries[uid].push(entry);
+      });
+
+      // Save a claim document for each user
+      for (const uid of Object.keys(groupedEntries)) {
+        const userEntries = groupedEntries[uid];
+        const userName = userEntries[0].userName || profile?.name || user.displayName || 'Unknown User';
+        
+        const totalHours = userEntries.reduce((sum, e) => sum + e.hours, 0);
+        const totalAmount = userEntries.reduce((sum, e) => sum + e.amount, 0);
+        
+        const claim: OvertimeClaim = {
+          uid: uid,
+          userName: userName,
+          month,
+          year,
+          entries: userEntries,
+          totalHours,
+          totalAmount,
+          status: 'pending',
+          createdAt: serverTimestamp()
+        };
+        
+        await addDoc(collection(db, 'claims'), claim);
+      }
+      
       setEntries([]);
       setView('history');
+      alert("Claims saved successfully!");
     } catch (error) {
       console.error('Error saving claim:', error);
+      alert("Failed to save claims. Please try again.");
     }
   };
 
@@ -424,22 +482,56 @@ export default function App() {
                       onChange={setNewUserEmail}
                     />
                     <Input 
-                      label="Initial Password"
-                      type={showNewPassword ? "text" : "password"}
-                      placeholder="••••••••" 
-                      value={newUserPassword} 
-                      onChange={setNewUserPassword}
+                      label="Designation"
+                      placeholder="e.g. COMPUTER OPERATOR" 
+                      value={newUserDesignation} 
+                      onChange={setNewUserDesignation}
                     />
-                  </div>
-                  <div className="flex items-center gap-2 mb-6">
-                    <input 
-                      type="checkbox" 
-                      id="show-new-pass" 
-                      checked={showNewPassword} 
-                      onChange={(e) => setShowNewPassword(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
+                    <Input 
+                      label="Department"
+                      placeholder="e.g. EXAM CELL" 
+                      value={newUserDepartment} 
+                      onChange={setNewUserDepartment}
                     />
-                    <label htmlFor="show-new-pass" className="text-xs font-medium text-gray-600">Show Password</label>
+                    <Input 
+                      label="Pay Scale"
+                      placeholder="e.g. 5" 
+                      value={newUserPayScale} 
+                      onChange={setNewUserPayScale}
+                    />
+                    <Input 
+                      label="Bank Account No"
+                      placeholder="e.g. 1234567890" 
+                      value={newUserBankAccount} 
+                      onChange={setNewUserBankAccount}
+                    />
+                    <Input 
+                      label="Bank Name & Branch"
+                      placeholder="e.g. BANK ALFALAH E-8 ISLAMABAD" 
+                      value={newUserBankName} 
+                      onChange={setNewUserBankName}
+                    />
+                    <Input 
+                      label="Weekday Rate"
+                      type="number"
+                      placeholder="120" 
+                      value={newUserWeekdayRate} 
+                      onChange={(v: string) => setNewUserWeekdayRate(Number(v))}
+                    />
+                    <Input 
+                      label="Weekend Rate"
+                      type="number"
+                      placeholder="160" 
+                      value={newUserWeekendRate} 
+                      onChange={(v: string) => setNewUserWeekendRate(Number(v))}
+                    />
+                    <Input 
+                      label="Holiday Rate"
+                      type="number"
+                      placeholder="200" 
+                      value={newUserHolidayRate} 
+                      onChange={(v: string) => setNewUserHolidayRate(Number(v))}
+                    />
                   </div>
                   <Button onClick={handleAdminCreateUser} disabled={isAdminCreating} className="w-full md:w-auto">
                     {isAdminCreating ? 'Creating...' : 'Create User Account'}
@@ -567,14 +659,9 @@ export default function App() {
                 className="flex flex-col gap-6"
               >
                 {/* Claim Header Info */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-2 gap-4">
                   <Input label="Month" value={month} onChange={setMonth} placeholder="NOV" />
                   <Input label="Year" type="number" value={year} onChange={(v: string) => setYear(parseInt(v))} />
-                  <div className="col-span-2 flex items-end">
-                    <p className="text-sm text-gray-500 italic">
-                      Claim for {profile?.name || 'User'} ({profile?.designation || 'Designation'})
-                    </p>
-                  </div>
                 </div>
 
                 {/* Entry Form */}
@@ -582,12 +669,12 @@ export default function App() {
                   <h3 className="font-bold mb-4 flex items-center gap-2">
                     <Plus className="w-5 h-5 text-blue-600" /> Add Overtime Entry
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 items-end">
-                    <Input label="Date" type="date" value={newEntry.date} onChange={(v: string) => setNewEntry({ ...newEntry, date: v })} />
-                    <Input label="Nature of Duty" value={newEntry.natureOfDuty} onChange={(v: string) => setNewEntry({ ...newEntry, natureOfDuty: v })} className="lg:col-span-2" />
-                    <Input label="From" type="time" value={newEntry.fromTime} onChange={(v: string) => setNewEntry({ ...newEntry, fromTime: v })} />
-                    <Input label="To" type="time" value={newEntry.toTime} onChange={(v: string) => setNewEntry({ ...newEntry, toTime: v })} />
-                    <div className="flex items-center gap-2 h-10 px-2">
+                  
+                  {/* Common Data */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 pb-4 border-b border-gray-100">
+                    <Input label="Date (Common)" type="date" value={newEntry.date} onChange={(v: string) => setNewEntry({ ...newEntry, date: v })} />
+                    <Input label="Nature of Duty (Common)" value={newEntry.natureOfDuty} onChange={(v: string) => setNewEntry({ ...newEntry, natureOfDuty: v })} />
+                    <div className="flex items-center gap-2 h-10 px-2 mt-6">
                       <input 
                         type="checkbox" 
                         id="gazetted" 
@@ -598,7 +685,26 @@ export default function App() {
                       <label htmlFor="gazetted" className="text-xs font-medium text-gray-600">Gazetted Holiday</label>
                     </div>
                   </div>
-                  <Button onClick={handleAddEntry} className="mt-4 w-full">Add to List</Button>
+
+                  {/* User Specific Data */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                    <div className="col-span-2">
+                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Select User</label>
+                      <select 
+                        className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+                        value={selectedUserId}
+                        onChange={(e) => setSelectedUserId(e.target.value)}
+                      >
+                        <option value="">Select a user...</option>
+                        {allUsers.map(u => (
+                          <option key={u.uid} value={u.uid}>{u.name} ({u.designation})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <Input label="From Time" type="time" value={newEntry.fromTime} onChange={(v: string) => setNewEntry({ ...newEntry, fromTime: v })} />
+                    <Input label="To Time" type="time" value={newEntry.toTime} onChange={(v: string) => setNewEntry({ ...newEntry, toTime: v })} />
+                  </div>
+                  <Button onClick={handleAddEntry} className="mt-6 w-full">Add to List</Button>
                 </div>
 
                 {/* Entries List */}
@@ -607,6 +713,7 @@ export default function App() {
                     <table className="w-full text-sm text-left">
                       <thead className="bg-gray-50 text-gray-600 uppercase text-xs font-bold">
                         <tr>
+                          <th className="px-4 py-3">User</th>
                           <th className="px-4 py-3">Date</th>
                           <th className="px-4 py-3">Day</th>
                           <th className="px-4 py-3">Duty</th>
@@ -619,6 +726,7 @@ export default function App() {
                       <tbody className="divide-y divide-gray-100">
                         {entries.map((entry, idx) => (
                           <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-3 font-bold text-blue-700">{entry.userName}</td>
                             <td className="px-4 py-3 font-medium">{entry.date}</td>
                             <td className="px-4 py-3">{entry.day}</td>
                             <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{entry.natureOfDuty}</td>
@@ -634,14 +742,14 @@ export default function App() {
                         ))}
                         {entries.length === 0 && (
                           <tr>
-                            <td colSpan={7} className="px-4 py-12 text-center text-gray-400 italic">No entries added yet.</td>
+                            <td colSpan={8} className="px-4 py-12 text-center text-gray-400 italic">No entries added yet.</td>
                           </tr>
                         )}
                       </tbody>
                       {entries.length > 0 && (
                         <tfoot className="bg-blue-50 font-bold">
                           <tr>
-                            <td colSpan={4} className="px-4 py-3 text-right uppercase text-xs tracking-wider">Total</td>
+                            <td colSpan={5} className="px-4 py-3 text-right uppercase text-xs tracking-wider">Total</td>
                             <td className="px-4 py-3">{entries.reduce((s, e) => s + e.hours, 0)}</td>
                             <td className="px-4 py-3 text-blue-700">Rs. {entries.reduce((s, e) => s + e.amount, 0)}</td>
                             <td></td>
@@ -656,7 +764,7 @@ export default function App() {
                         Amount in words: {numberToWords(entries.reduce((s, e) => s + e.amount, 0))}
                       </p>
                       <Button onClick={handleSaveClaim} className="shadow-lg shadow-blue-100">
-                        Submit Claim
+                        Submit All Claims
                       </Button>
                     </div>
                   )}
