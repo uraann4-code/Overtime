@@ -38,7 +38,19 @@ export function calculateHours(from: string, to: string): number {
   let diff = (toH * 60 + toM) - (fromH * 60 + fromM);
   if (diff < 0) diff += 24 * 60; // Handle overnight if needed, though unlikely for OT
   
-  return parseFloat((diff / 60).toFixed(2));
+  const hours = Math.floor(diff / 60);
+  const minutes = diff % 60;
+  
+  let roundedMinutes = 0;
+  if (minutes <= 15) {
+    roundedMinutes = 0;
+  } else if (minutes <= 45) {
+    roundedMinutes = 30;
+  } else {
+    roundedMinutes = 60;
+  }
+  
+  return hours + (roundedMinutes / 60);
 }
 
 export function calculateAmount(hours: number, day: string, isGazetted: boolean, rates: { weekday: number, weekend: number, holiday: number }): number {

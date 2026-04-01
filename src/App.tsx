@@ -424,11 +424,17 @@ export default function App() {
         };
         
         await addDoc(collection(db, 'claims'), claim);
+        
+        // Generate PDF for the user
+        const claimUser = allUsers.find(u => u.uid === uid) || profile;
+        if (claimUser) {
+          generateOvertimePDF(claimUser, claim);
+        }
       }
       
       setEntries([]);
       setView('history');
-      alert("Claims saved successfully!");
+      alert("Claims saved and PDFs downloaded successfully!");
     } catch (error) {
       console.error('Error saving claim:', error);
       alert("Failed to save claims. Please try again.");
