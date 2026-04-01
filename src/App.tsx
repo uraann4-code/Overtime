@@ -42,6 +42,7 @@ interface SelectedUserTime {
   uid: string;
   name: string;
   designation: string;
+  date: string;
   fromTime: string;
   toTime: string;
 }
@@ -351,39 +352,34 @@ export default function App() {
 
     for (const su of selectedUserTimes) {
       if (!su.fromTime || !su.toTime) {
-        alert(`Please fill times for ${su.name}`);
+        alert(`Please fill times for ${su.name} on ${su.date}`);
         return;
       }
     }
     
-    const newEntries: OvertimeEntry[] = [];
-
-    selectedDates.forEach(date => {
-      const day = getDayName(date);
+    const newEntries: OvertimeEntry[] = selectedUserTimes.map(su => {
+      const day = getDayName(su.date);
+      const hours = calculateHours(su.fromTime, su.toTime);
+      const selectedUser = allUsers.find(u => u.uid === su.uid);
+      const rates = {
+        weekday: selectedUser?.weekdayRate || 120,
+        weekend: selectedUser?.weekendRate || 160,
+        holiday: selectedUser?.holidayRate || 200
+      };
+      const amount = calculateAmount(hours, day, !!newEntry.isGazettedHoliday, rates);
       
-      selectedUserTimes.forEach(su => {
-        const hours = calculateHours(su.fromTime, su.toTime);
-        const selectedUser = allUsers.find(u => u.uid === su.uid);
-        const rates = {
-          weekday: selectedUser?.weekdayRate || 120,
-          weekend: selectedUser?.weekendRate || 160,
-          holiday: selectedUser?.holidayRate || 200
-        };
-        const amount = calculateAmount(hours, day, !!newEntry.isGazettedHoliday, rates);
-        
-        newEntries.push({
-          userId: su.uid,
-          userName: su.name,
-          date,
-          day,
-          natureOfDuty: newEntry.natureOfDuty || '',
-          fromTime: su.fromTime,
-          toTime: su.toTime,
-          hours,
-          amount,
-          isGazettedHoliday: !!newEntry.isGazettedHoliday
-        });
-      });
+      return {
+        userId: su.uid,
+        userName: su.name,
+        date: su.date,
+        day,
+        natureOfDuty: newEntry.natureOfDuty || '',
+        fromTime: su.fromTime,
+        toTime: su.toTime,
+        hours,
+        amount,
+        isGazettedHoliday: !!newEntry.isGazettedHoliday
+      };
     });
     
     setEntries([...entries, ...newEntries]);
@@ -814,7 +810,20 @@ export default function App() {
                         value={newEntry.date} 
                         onChange={(v: string) => {
                           if (v && !selectedDates.includes(v)) {
-                            setSelectedDates([...selectedDates, v].sort());
+                            const newDates = [...selectedDates, v].sort();
+                            setSelectedDates(newDates);
+                            
+                            // Add rows for existing unique users
+                            const uniqueUsers = Array.from(new Map(selectedUserTimes.map(su => [su.uid, { uid: su.uid, name: su.name, designation: su.designation }])).values());
+                            const newRows = uniqueUsers.map(u => ({
+                              uid: u.uid,
+                              name: u.name,
+                              designation: u.designation,
+                              date: v,
+                              fromTime: '18:30',
+                              toTime: '19:30'
+                            }));
+                            setSelectedUserTimes([...selectedUserTimes, ...newRows]);
                           }
                           setNewEntry({ ...newEntry, date: '' });
                         }} 
@@ -824,7 +833,10 @@ export default function App() {
                           {selectedDates.map(d => (
                             <span key={d} className="bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-xs flex items-center gap-1 font-medium">
                               {d}
-                              <button onClick={() => setSelectedDates(selectedDates.filter(sd => sd !== d))} className="hover:text-red-500">
+                              <button onClick={() => {
+                                setSelectedDates(selectedDates.filter(sd => sd !== d));
+                                setSelectedUserTimes(selectedUserTimes.filter(su => su.date !== d));
+                              }} className="hover:text-red-500">
                                 <X className="w-3 h-3" />
                               </button>
                             </span>
@@ -855,16 +867,22 @@ export default function App() {
                         onChange={(e) => {
                           const uid = e.target.value;
                           if (!uid) return;
+                          if (selectedDates.length === 0) {
+                            alert("Please select at least one date first.");
+                            return;
+                          }
                           if (selectedUserTimes.find(su => su.uid === uid)) return;
                           const user = allUsers.find(u => u.uid === uid);
                           if (user) {
-                            setSelectedUserTimes([...selectedUserTimes, {
+                            const newRows = selectedDates.map(date => ({
                               uid: user.uid,
                               name: user.name,
                               designation: user.designation,
+                              date: date,
                               fromTime: '18:30',
                               toTime: '19:30'
-                            }]);
+                            }));
+                            setSelectedUserTimes([...selectedUserTimes, ...newRows]);
                           }
                         }}
                       >
@@ -881,6 +899,7 @@ export default function App() {
                           <thead className="bg-gray-100 text-gray-600 uppercase text-xs font-bold">
                             <tr>
                               <th className="px-4 py-3">User</th>
+                              <th className="px-4 py-3 w-32">Date</th>
                               <th className="px-4 py-3 w-32">From Time</th>
                               <th className="px-4 py-3 w-32">To Time</th>
                               <th className="px-4 py-3 w-10"></th>
@@ -888,8 +907,9 @@ export default function App() {
                           </thead>
                           <tbody className="divide-y divide-gray-200">
                             {selectedUserTimes.map((su, idx) => (
-                              <tr key={su.uid} className="bg-white">
+                              <tr key={`${su.uid}-${su.date}`} className="bg-white">
                                 <td className="px-4 py-3 font-medium text-blue-700">{su.name} <span className="text-xs text-gray-500 font-normal block">{su.designation}</span></td>
+                                <td className="px-4 py-3 font-medium text-gray-600">{su.date}</td>
                                 <td className="px-4 py-3">
                                   <input type="time" className="w-full px-2 py-1 border rounded" value={su.fromTime} onChange={e => {
                                     const newArr = [...selectedUserTimes];
@@ -905,7 +925,11 @@ export default function App() {
                                   }} />
                                 </td>
                                 <td className="px-4 py-3 text-right">
-                                  <button onClick={() => setSelectedUserTimes(selectedUserTimes.filter(u => u.uid !== su.uid))} className="text-red-400 hover:text-red-600 p-1">
+                                  <button onClick={() => {
+                                    const newArr = [...selectedUserTimes];
+                                    newArr.splice(idx, 1);
+                                    setSelectedUserTimes(newArr);
+                                  }} className="text-red-400 hover:text-red-600 p-1">
                                     <X className="w-4 h-4" />
                                   </button>
                                 </td>
