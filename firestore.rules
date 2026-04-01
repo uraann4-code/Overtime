@@ -1,0 +1,101 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: uid
+    // Fields:
+    //   - uid: string (required)
+    //   - name: string (required)
+    //   - email: string (required)
+    //   - designation: string (optional)
+    //   - department: string (optional)
+    //   - payScale: string (optional)
+    //   - bankAccount: string (optional)
+    //   - bankName: string (optional)
+    //
+    // Collection: claims
+    // Document ID: claimId
+    // Fields:
+    //   - uid: string (required)
+    //   - month: string (required)
+    //   - year: number (required)
+    //   - entries: list (required)
+    //   - totalHours: number (required)
+    //   - totalAmount: number (required)
+    //   - createdAt: timestamp (required)
+    //   - status: string (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "uraann4@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isAllowed() {
+      return isAdmin() || exists(/databases/$(database)/documents/allowed_users/$(request.auth.token.email));
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name', 'email']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidClaim(data) {
+      return data.keys().hasAll(['uid', 'month', 'year', 'entries', 'totalHours', 'totalAmount', 'createdAt', 'status']) &&
+             data.uid is string && data.uid == request.auth.uid &&
+             data.month is string && data.month.size() > 0 &&
+             data.year is number &&
+             data.entries is list &&
+             data.totalHours is number &&
+             data.totalAmount is number &&
+             data.status in ['pending', 'approved', 'rejected'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /allowed_users/{email} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if (isOwner(userId) && isAllowed() && isValidUser(request.resource.data)) || isAdmin();
+      allow update: if (isOwner(userId) && isValidUser(request.resource.data)) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /claims/{claimId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isAllowed() && isValidClaim(request.resource.data);
+      allow update: if (isDocOwner() && resource.data.status == 'pending' && isValidClaim(request.resource.data)) || isAdmin();
+      allow delete: if isDocOwner() && resource.data.status == 'pending' || isAdmin();
+    }
+  }
+}

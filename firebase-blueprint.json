@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User details for the overtime claim form",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "Full Name" },
+        "email": { "type": "string", "description": "Email Address" },
+        "designation": { "type": "string", "description": "Job Designation" },
+        "department": { "type": "string", "description": "Department Name" },
+        "payScale": { "type": "string", "description": "Pay Scale" },
+        "bankAccount": { "type": "string", "description": "Bank Account Number" },
+        "bankName": { "type": "string", "description": "Bank Name and Branch" }
+      },
+      "required": ["uid", "name", "email"]
+    },
+    "OvertimeClaim": {
+      "title": "Overtime Claim",
+      "description": "A monthly overtime claim record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Owner's UID" },
+        "month": { "type": "string", "description": "Month of claim (e.g., NOV)" },
+        "year": { "type": "number", "description": "Year of claim" },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": { "type": "string", "format": "date" },
+              "day": { "type": "string" },
+              "natureOfDuty": { "type": "string" },
+              "fromTime": { "type": "string" },
+              "toTime": { "type": "string" },
+              "hours": { "type": "number" },
+              "amount": { "type": "number" },
+              "isGazettedHoliday": { "type": "boolean" }
+            }
+          }
+        },
+        "totalHours": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] }
+      },
+      "required": ["uid", "month", "year", "entries", "totalHours", "totalAmount"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "UserProfile",
+      "description": "User profile documents"
+    },
+    "/allowed_users/{email}": {
+      "schema": "object",
+      "description": "Whitelist of emails allowed to use the system"
+    },
+    "/claims/{claimId}": {
+      "schema": "OvertimeClaim",
+      "description": "Overtime claim records"
+    }
+  }
+}
