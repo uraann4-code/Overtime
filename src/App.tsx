@@ -6,6 +6,7 @@ import { Plus, Download, History, LogOut, User as UserIcon, FileText, Trash2, Ca
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, getDayName, calculateHours, calculateAmount, numberToWords } from './lib/utils';
 import { generateOvertimePDF } from './lib/pdfGenerator';
+import { generateOvertimeExcel } from './lib/excelGenerator';
 
 const ADMIN_EMAIL = "uraann4@gmail.com";
 
@@ -938,8 +939,31 @@ export default function App() {
                             </button>
                           </>
                         )}
-                        <Button variant="outline" onClick={() => generateOvertimePDF({ name: claim.userName, designation: 'Staff', department: 'Bahria', payScale: '-', bankAccount: '-', bankName: '-' }, claim)} className="p-2">
-                          <Download className="w-5 h-5" />
+                        <Button variant="outline" onClick={() => {
+                          const claimUser = allUsers.find(u => u.uid === claim.uid) || { 
+                            name: claim.userName, 
+                            designation: 'Staff', 
+                            department: 'Bahria', 
+                            payScale: '-', 
+                            bankAccount: '-', 
+                            bankName: '-' 
+                          };
+                          generateOvertimePDF(claimUser, claim);
+                        }} className="p-2" title="Download PDF">
+                          <Download className="w-5 h-5 text-red-500" />
+                        </Button>
+                        <Button variant="outline" onClick={() => {
+                          const claimUser = allUsers.find(u => u.uid === claim.uid) || { 
+                            name: claim.userName, 
+                            designation: 'Staff', 
+                            department: 'Bahria', 
+                            payScale: '-', 
+                            bankAccount: '-', 
+                            bankName: '-' 
+                          };
+                          generateOvertimeExcel(claimUser, claim);
+                        }} className="p-2" title="Download Excel">
+                          <Download className="w-5 h-5 text-green-600" />
                         </Button>
                       </div>
                     </div>
@@ -1228,8 +1252,11 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" onClick={() => generateOvertimePDF(profile, claim)} className="p-2">
-                          <Download className="w-5 h-5" />
+                        <Button variant="outline" onClick={() => generateOvertimePDF(profile || { name: user.displayName || user.email?.split('@')[0] }, claim)} className="p-2" title="Download PDF">
+                          <Download className="w-5 h-5 text-red-500" />
+                        </Button>
+                        <Button variant="outline" onClick={() => generateOvertimeExcel(profile || { name: user.displayName || user.email?.split('@')[0] }, claim)} className="p-2" title="Download Excel">
+                          <Download className="w-5 h-5 text-green-600" />
                         </Button>
                       </div>
                     </div>
