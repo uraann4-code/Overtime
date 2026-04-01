@@ -9,10 +9,11 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 export const loginWithEmail = async (email: string, pass: string) => {
   try {
+    console.log('Attempting login for:', email);
     const result = await signInWithEmailAndPassword(auth, email, pass);
     return result.user;
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Login error details:', error);
     throw error;
   }
 };

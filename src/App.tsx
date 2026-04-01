@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db, loginWithEmail, logout } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, deleteDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, deleteDoc, updateDoc, getDocFromCache, getDocFromServer } from 'firebase/firestore';
 import { Plus, Download, History, LogOut, User as UserIcon, FileText, Trash2, Calendar, Clock, DollarSign, Shield, Users, CheckCircle, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, getDayName, calculateHours, calculateAmount, numberToWords } from './lib/utils';
@@ -101,14 +101,25 @@ const Badge = ({ children, variant = 'gray' }: any) => {
 };
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<any>({ uid: 'direct-access-uid', email: ADMIN_EMAIL, displayName: 'Direct Access Admin' });
+  const [profile, setProfile] = useState<UserProfile | null>({
+    uid: 'direct-access-uid',
+    name: 'Direct Access Admin',
+    email: ADMIN_EMAIL,
+    designation: 'Super Admin',
+    department: 'All',
+    payScale: 'N/A',
+    bankAccount: 'N/A',
+    bankName: 'N/A',
+    role: 'admin'
+  });
   const [claims, setClaims] = useState<OvertimeClaim[]>([]);
   const [allClaims, setAllClaims] = useState<OvertimeClaim[]>([]);
   const [allowedUsers, setAllowedUsers] = useState<AllowedUser[]>([]);
   const [view, setView] = useState<'form' | 'history' | 'profile' | 'admin_users' | 'admin_claims'>('form');
-  const [loading, setLoading] = useState(true);
-  const [isAllowed, setIsAllowed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [isAllowed, setIsAllowed] = useState(true);
+  const [dbConnected, setDbConnected] = useState<boolean | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
   // Form State
@@ -127,111 +138,57 @@ export default function App() {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserName, setNewUserName] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [isAdminCreating, setIsAdminCreating] = useState(false);
 
-  // Login State
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-
-  const isAdmin = user?.email === ADMIN_EMAIL || profile?.role === 'admin';
+  const isAdmin = true;
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
-      setAuthError(null);
-      
-      if (u) {
-        // Check if allowed
-        const allowedDoc = await getDoc(doc(db, 'allowed_users', u.email!));
-        const isSuperAdmin = u.email === ADMIN_EMAIL;
-        
-        if (!allowedDoc.exists() && !isSuperAdmin) {
-          setIsAllowed(false);
-          setAuthError("You are not authorized to access this system. Please contact the administrator.");
-          setLoading(false);
-          return;
-        }
-
-        setIsAllowed(true);
-        const docRef = doc(db, 'users', u.uid);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-          setProfile(docSnap.data() as UserProfile);
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, '_connection_test', 'ping'));
+        setDbConnected(true);
+      } catch (error: any) {
+        console.error("Firestore connection test failed:", error);
+        if (error.message.includes('the client is offline')) {
+          setDbConnected(false);
         } else {
-          const newProfile: UserProfile = {
-            uid: u.uid,
-            name: u.displayName || '',
-            email: u.email || '',
-            designation: '',
-            department: '',
-            payScale: '',
-            bankAccount: '',
-            bankName: '',
-            role: isSuperAdmin ? 'admin' : 'user'
-          };
-          await setDoc(docRef, newProfile);
-          setProfile(newProfile);
-          setView('profile');
-        }
-
-        // Fetch User Claims
-        const q = query(collection(db, 'claims'), where('uid', '==', u.uid), orderBy('createdAt', 'desc'));
-        onSnapshot(q, (snapshot) => {
-          setClaims(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as OvertimeClaim)));
-        });
-
-        // Admin Data
-        if (isSuperAdmin || docSnap.data()?.role === 'admin') {
-          // Fetch All Claims
-          onSnapshot(query(collection(db, 'claims'), orderBy('createdAt', 'desc')), (snapshot) => {
-            setAllClaims(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as OvertimeClaim)));
-          });
-          // Fetch Allowed Users
-          onSnapshot(collection(db, 'allowed_users'), (snapshot) => {
-            setAllowedUsers(snapshot.docs.map(d => ({ email: d.id, ...d.data() } as AllowedUser)));
-          });
+          setDbConnected(true);
         }
       }
-      setLoading(false);
-    });
-    return unsubscribe;
+    }
+    testConnection();
   }, []);
 
-  const handleBootstrap = async () => {
-    setIsLoggingIn(true);
-    try {
-      const response = await fetch('/api/admin/bootstrap', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: 'Admin123' })
-      });
-      const data = await response.json();
-      if (response.ok) {
-        alert('Admin account initialized! You can now sign in.');
-      } else {
-        alert('Bootstrap failed: ' + data.error);
-      }
-    } catch (error: any) {
-      alert('Error: ' + error.message);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
+  useEffect(() => {
+    // Fetch User Claims
+    const q = query(collection(db, 'claims'), where('uid', '==', 'direct-access-uid'), orderBy('createdAt', 'desc'));
+    const unsubClaims = onSnapshot(q, (snapshot) => {
+      setClaims(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as OvertimeClaim)));
+    }, (error) => {
+      console.error("Error fetching claims:", error);
+    });
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    setAuthError(null);
-    try {
-      await loginWithEmail(loginEmail, loginPassword);
-    } catch (error: any) {
-      setAuthError(error.message || "Login failed. Please check your credentials.");
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
+    // Fetch All Claims
+    const unsubAllClaims = onSnapshot(query(collection(db, 'claims'), orderBy('createdAt', 'desc')), (snapshot) => {
+      setAllClaims(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as OvertimeClaim)));
+    }, (error) => {
+      console.error("Error fetching all claims:", error);
+    });
+
+    // Fetch Allowed Users
+    const unsubUsers = onSnapshot(collection(db, 'allowed_users'), (snapshot) => {
+      setAllowedUsers(snapshot.docs.map(d => ({ email: d.id, ...d.data() } as AllowedUser)));
+    }, (error) => {
+      console.error("Error fetching allowed users:", error);
+    });
+
+    return () => {
+      unsubClaims();
+      unsubAllClaims();
+      unsubUsers();
+    };
+  }, []);
 
   const handleAdminCreateUser = async () => {
     if (!newUserEmail || !newUserPassword || !newUserName) return;
@@ -349,70 +306,6 @@ export default function App() {
 
   if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
 
-  if (!user || !isAllowed) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full"
-        >
-          <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Shield className="w-10 h-10 text-blue-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2 text-center">Bahria University</h1>
-          <p className="text-gray-600 mb-8 text-center">Overtime Claim Management System</p>
-          
-          <form onSubmit={handleLogin} className="space-y-4">
-            <Input 
-              label="Email Address" 
-              type="email" 
-              value={loginEmail} 
-              onChange={setLoginEmail} 
-              placeholder="admin@example.com"
-              required
-            />
-            <Input 
-              label="Password" 
-              type="password" 
-              value={loginPassword} 
-              onChange={setLoginPassword} 
-              placeholder="••••••••"
-              required
-            />
-            
-            {authError && (
-              <div className="p-3 bg-red-50 text-red-700 rounded-lg text-xs border border-red-100">
-                {authError}
-              </div>
-            )}
-
-            <Button type="submit" disabled={isLoggingIn} className="w-full justify-center py-3 text-lg">
-              {isLoggingIn ? 'Signing in...' : 'Sign In'}
-            </Button>
-            
-            <div className="pt-4 border-t border-gray-100">
-              <button 
-                type="button"
-                onClick={handleBootstrap}
-                className="text-xs text-gray-400 hover:text-blue-600 transition-colors w-full text-center"
-              >
-                Initialize Admin Account (First time only)
-              </button>
-            </div>
-          </form>
-
-          {user && !isAllowed && (
-            <div className="mt-6 p-4 bg-yellow-50 text-yellow-800 rounded-xl text-sm border border-yellow-100 text-center">
-              Your account is not whitelisted. Please contact the administrator.
-              <Button variant="outline" onClick={logout} className="mt-4 w-full justify-center">Logout</Button>
-            </div>
-          )}
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
@@ -430,14 +323,11 @@ export default function App() {
         <div className="flex items-center gap-4">
           <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full">
             <div className="w-6 h-6 rounded-full bg-blue-200 flex items-center justify-center text-blue-700 text-xs font-bold">
-              {user.displayName?.[0]}
+              {user.displayName?.[0] || 'A'}
             </div>
             <span className="text-sm font-medium text-gray-700">{user.displayName}</span>
             {isAdmin && <Badge variant="blue">Admin</Badge>}
           </div>
-          <Button variant="secondary" onClick={logout} className="p-2">
-            <LogOut className="w-5 h-5" />
-          </Button>
         </div>
       </header>
 
@@ -535,11 +425,21 @@ export default function App() {
                     />
                     <Input 
                       label="Initial Password"
-                      type="password"
+                      type={showNewPassword ? "text" : "password"}
                       placeholder="••••••••" 
                       value={newUserPassword} 
                       onChange={setNewUserPassword}
                     />
+                  </div>
+                  <div className="flex items-center gap-2 mb-6">
+                    <input 
+                      type="checkbox" 
+                      id="show-new-pass" 
+                      checked={showNewPassword} 
+                      onChange={(e) => setShowNewPassword(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <label htmlFor="show-new-pass" className="text-xs font-medium text-gray-600">Show Password</label>
                   </div>
                   <Button onClick={handleAdminCreateUser} disabled={isAdminCreating} className="w-full md:w-auto">
                     {isAdminCreating ? 'Creating...' : 'Create User Account'}

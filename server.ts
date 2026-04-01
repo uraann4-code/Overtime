@@ -2,6 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
 import firebaseConfig from "./firebase-applet-config.json" assert { type: "json" };
 
 async function startServer() {
@@ -9,19 +10,60 @@ async function startServer() {
   const PORT = 3000;
 
   // Initialize Firebase Admin
-  // Note: In this environment, we might need to provide credentials if not running in GCP
-  // But we'll try to initialize with project ID first.
   if (!admin.apps.length) {
+    console.log("Initializing Firebase Admin with Project ID:", firebaseConfig.projectId);
     admin.initializeApp({
       projectId: firebaseConfig.projectId,
     });
+    console.log("Firebase Admin initialized.");
   }
 
   app.use(express.json());
 
+  // Function to bootstrap super admin automatically
+  async function bootstrapSuperAdmin() {
+    const superAdminEmail = "uraann4@gmail.com";
+    const password = "Admin123";
+    console.log(`[BOOTSTRAP] Starting automatic bootstrap for ${superAdminEmail}`);
+    
+    try {
+      let userRecord;
+      try {
+        userRecord = await admin.auth().getUserByEmail(superAdminEmail);
+        console.log(`[BOOTSTRAP] User exists (UID: ${userRecord.uid}). Updating password/verification.`);
+        await admin.auth().updateUser(userRecord.uid, { 
+          password,
+          emailVerified: true
+        });
+      } catch (e: any) {
+        console.log(`[BOOTSTRAP] User does not exist. Creating new user.`);
+        userRecord = await admin.auth().createUser({
+          email: superAdminEmail,
+          password,
+          displayName: "Super Admin",
+          emailVerified: true,
+        });
+      }
+
+      // Whitelist in Firestore
+      const db = getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId);
+      await db.collection("allowed_users").doc(superAdminEmail).set({
+        email: superAdminEmail,
+        addedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.log(`[BOOTSTRAP] Success: ${superAdminEmail} is ready.`);
+    } catch (error: any) {
+      console.error("[BOOTSTRAP] Error during automatic bootstrap:", error);
+    }
+  }
+
+  // Run bootstrap
+  await bootstrapSuperAdmin();
+
   // API Route to create a user (Admin only)
   app.post("/api/admin/create-user", async (req, res) => {
     const { email, password, displayName, adminEmail } = req.body;
+    console.log(`Admin ${adminEmail} is creating user: ${email}`);
 
     // Basic security: only allow the super admin email to trigger this
     // In a real app, you'd check the auth token of the requester
@@ -54,27 +96,37 @@ async function startServer() {
     try {
       // Check if user exists
       let userRecord;
+      console.log(`Bootstrapping super admin: ${superAdminEmail}`);
       try {
         userRecord = await admin.auth().getUserByEmail(superAdminEmail);
-        // If exists, update password
-        await admin.auth().updateUser(userRecord.uid, { password });
+        console.log(`User exists with UID: ${userRecord.uid}. Updating password and emailVerified.`);
+        // If exists, update password and ensure emailVerified
+        await admin.auth().updateUser(userRecord.uid, { 
+          password,
+          emailVerified: true
+        });
         res.json({ message: "Super admin password updated", uid: userRecord.uid });
       } catch (e: any) {
+        console.log(`User does not exist. Creating new user.`);
         // If not exists, create
         userRecord = await admin.auth().createUser({
           email: superAdminEmail,
           password,
           displayName: "Super Admin",
+          emailVerified: true,
         });
+        console.log(`User created with UID: ${userRecord.uid}`);
         res.json({ message: "Super admin created", uid: userRecord.uid });
       }
 
       // Ensure whitelisted in Firestore
-      const db = admin.firestore();
+      console.log(`Whitelisting ${superAdminEmail} in Firestore database: ${firebaseConfig.firestoreDatabaseId}`);
+      const db = getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId);
       await db.collection("allowed_users").doc(superAdminEmail).set({
         email: superAdminEmail,
         addedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+      console.log(`Whitelisting complete.`);
     } catch (error: any) {
       console.error("Bootstrap error:", error);
       res.status(500).json({ error: error.message });
