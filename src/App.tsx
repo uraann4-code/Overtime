@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { auth, db, loginWithEmail, logout } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, deleteDoc, updateDoc, getDocFromCache, getDocFromServer } from 'firebase/firestore';
-import { Plus, Download, History, LogOut, User as UserIcon, FileText, Trash2, Calendar, Clock, DollarSign, Shield, Users, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Download, History, LogOut, User as UserIcon, FileText, Trash2, Calendar, Clock, DollarSign, Shield, Users, CheckCircle, XCircle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, getDayName, calculateHours, calculateAmount, numberToWords } from './lib/utils';
 import { generateOvertimePDF } from './lib/pdfGenerator';
@@ -130,6 +130,7 @@ export default function App() {
 
   // Form State
   const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [month, setMonth] = useState(new Date().toLocaleString('default', { month: 'short' }).toUpperCase());
   const [year, setYear] = useState(new Date().getFullYear());
   const [entries, setEntries] = useState<OvertimeEntry[]>([]);
@@ -271,12 +272,11 @@ export default function App() {
   };
 
   const handleAddEntry = () => {
-    if (!newEntry.date || !newEntry.fromTime || !newEntry.toTime || !selectedUserId) {
-      alert("Please fill all required fields, including selecting a user.");
+    if (selectedDates.length === 0 || !newEntry.fromTime || !newEntry.toTime || !selectedUserId) {
+      alert("Please fill all required fields, including selecting at least one date and a user.");
       return;
     }
     
-    const day = getDayName(newEntry.date as string);
     const hours = calculateHours(newEntry.fromTime as string, newEntry.toTime as string);
     
     // Determine rates based on selected user or fallback to defaults
@@ -287,23 +287,26 @@ export default function App() {
       holiday: selectedUser?.holidayRate || 200
     };
     
-    const amount = calculateAmount(hours, day, !!newEntry.isGazettedHoliday, rates);
+    const newEntries = selectedDates.map(date => {
+      const day = getDayName(date);
+      const amount = calculateAmount(hours, day, !!newEntry.isGazettedHoliday, rates);
+      
+      return {
+        userId: selectedUserId,
+        userName: selectedUser?.name || 'Unknown User',
+        date,
+        day,
+        natureOfDuty: newEntry.natureOfDuty || '',
+        fromTime: newEntry.fromTime as string,
+        toTime: newEntry.toTime as string,
+        hours,
+        amount,
+        isGazettedHoliday: !!newEntry.isGazettedHoliday
+      };
+    });
     
-    const entry: OvertimeEntry = {
-      userId: selectedUserId,
-      userName: selectedUser?.name || 'Unknown User',
-      date: newEntry.date as string,
-      day,
-      natureOfDuty: newEntry.natureOfDuty || '',
-      fromTime: newEntry.fromTime as string,
-      toTime: newEntry.toTime as string,
-      hours,
-      amount,
-      isGazettedHoliday: !!newEntry.isGazettedHoliday
-    };
-    
-    setEntries([...entries, entry]);
-    // Clear only time and user, keep date and duty for easy bulk entry
+    setEntries([...entries, ...newEntries]);
+    // Clear only time and user, keep dates and duty for easy bulk entry
     setNewEntry({ ...newEntry, fromTime: '', toTime: '' });
     setSelectedUserId('');
   };
@@ -672,7 +675,31 @@ export default function App() {
                   
                   {/* Common Data */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 pb-4 border-b border-gray-100">
-                    <Input label="Date (Common)" type="date" value={newEntry.date} onChange={(v: string) => setNewEntry({ ...newEntry, date: v })} />
+                    <div className="flex flex-col gap-2">
+                      <Input 
+                        label="Add Date (Common)" 
+                        type="date" 
+                        value={newEntry.date} 
+                        onChange={(v: string) => {
+                          if (v && !selectedDates.includes(v)) {
+                            setSelectedDates([...selectedDates, v].sort());
+                          }
+                          setNewEntry({ ...newEntry, date: '' });
+                        }} 
+                      />
+                      {selectedDates.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {selectedDates.map(d => (
+                            <span key={d} className="bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-xs flex items-center gap-1 font-medium">
+                              {d}
+                              <button onClick={() => setSelectedDates(selectedDates.filter(sd => sd !== d))} className="hover:text-red-500">
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <Input label="Nature of Duty (Common)" value={newEntry.natureOfDuty} onChange={(v: string) => setNewEntry({ ...newEntry, natureOfDuty: v })} />
                     <div className="flex items-center gap-2 h-10 px-2 mt-6">
                       <input 
