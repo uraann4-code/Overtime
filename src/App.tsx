@@ -412,13 +412,24 @@ export default function App() {
         const totalAmount = userEntries.reduce((sum, e) => sum + e.amount, 0);
         
         const claim: OvertimeClaim = {
-          uid: uid,
-          userName: userName,
-          month,
-          year,
-          entries: userEntries,
-          totalHours,
-          totalAmount,
+          uid: uid || '',
+          userName: userName || 'Unknown User',
+          month: month || '',
+          year: year || new Date().getFullYear(),
+          entries: userEntries.map(e => ({
+            userId: e.userId || '',
+            userName: e.userName || 'Unknown User',
+            date: e.date || '',
+            day: e.day || '',
+            natureOfDuty: e.natureOfDuty || '',
+            fromTime: e.fromTime || '',
+            toTime: e.toTime || '',
+            hours: e.hours || 0,
+            amount: e.amount || 0,
+            isGazettedHoliday: !!e.isGazettedHoliday
+          })),
+          totalHours: totalHours || 0,
+          totalAmount: totalAmount || 0,
           status: 'pending',
           createdAt: serverTimestamp()
         };
@@ -435,9 +446,9 @@ export default function App() {
       setEntries([]);
       setView('history');
       alert("Claims saved and PDFs downloaded successfully!");
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving claim:', error);
-      alert("Failed to save claims. Please try again.");
+      alert(`Failed to save claims. Error: ${error.message || error}`);
     }
   };
 
@@ -966,21 +977,41 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {entries.map((entry, idx) => (
-                          <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-4 py-3 font-bold text-blue-700">{entry.userName}</td>
-                            <td className="px-4 py-3 font-medium">{entry.date}</td>
-                            <td className="px-4 py-3">{entry.day}</td>
-                            <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{entry.natureOfDuty}</td>
-                            <td className="px-4 py-3 text-xs font-mono">{entry.fromTime} - {entry.toTime}</td>
-                            <td className="px-4 py-3 font-semibold">{entry.hours}</td>
-                            <td className="px-4 py-3 font-bold text-blue-600">Rs. {entry.amount}</td>
-                            <td className="px-4 py-3 text-right">
-                              <button onClick={() => handleRemoveEntry(idx)} className="text-red-400 hover:text-red-600 p-1">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
+                        {Object.entries(
+                          entries.reduce((acc, entry) => {
+                            const uid = entry.userId || 'unknown';
+                            if (!acc[uid]) acc[uid] = [];
+                            acc[uid].push(entry);
+                            return acc;
+                          }, {} as Record<string, OvertimeEntry[]>)
+                        ).map(([uid, userEntries]) => (
+                          <React.Fragment key={uid}>
+                            {userEntries.map((entry, idx) => {
+                              const globalIdx = entries.indexOf(entry);
+                              return (
+                                <tr key={globalIdx} className="hover:bg-gray-50 transition-colors">
+                                  <td className="px-4 py-3 font-bold text-blue-700">{entry.userName}</td>
+                                  <td className="px-4 py-3 font-medium">{entry.date}</td>
+                                  <td className="px-4 py-3">{entry.day}</td>
+                                  <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{entry.natureOfDuty}</td>
+                                  <td className="px-4 py-3 text-xs font-mono">{entry.fromTime} - {entry.toTime}</td>
+                                  <td className="px-4 py-3 font-semibold">{entry.hours}</td>
+                                  <td className="px-4 py-3 font-bold text-blue-600">Rs. {entry.amount}</td>
+                                  <td className="px-4 py-3 text-right">
+                                    <button onClick={() => handleRemoveEntry(globalIdx)} className="text-red-400 hover:text-red-600 p-1">
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            <tr className="bg-blue-50/50 font-bold border-t-2 border-blue-100">
+                              <td colSpan={5} className="px-4 py-3 text-right uppercase text-xs tracking-wider text-blue-800">Total for {userEntries[0].userName}</td>
+                              <td className="px-4 py-3 text-blue-900">{userEntries.reduce((s, e) => s + e.hours, 0)}</td>
+                              <td className="px-4 py-3 text-blue-700">Rs. {userEntries.reduce((s, e) => s + e.amount, 0)}</td>
+                              <td></td>
+                            </tr>
+                          </React.Fragment>
                         ))}
                         {entries.length === 0 && (
                           <tr>
@@ -988,23 +1019,10 @@ export default function App() {
                           </tr>
                         )}
                       </tbody>
-                      {entries.length > 0 && (
-                        <tfoot className="bg-blue-50 font-bold">
-                          <tr>
-                            <td colSpan={5} className="px-4 py-3 text-right uppercase text-xs tracking-wider">Total</td>
-                            <td className="px-4 py-3">{entries.reduce((s, e) => s + e.hours, 0)}</td>
-                            <td className="px-4 py-3 text-blue-700">Rs. {entries.reduce((s, e) => s + e.amount, 0)}</td>
-                            <td></td>
-                          </tr>
-                        </tfoot>
-                      )}
                     </table>
                   </div>
                   {entries.length > 0 && (
-                    <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-between items-center">
-                      <p className="text-xs text-gray-500 italic">
-                        Amount in words: {numberToWords(entries.reduce((s, e) => s + e.amount, 0))}
-                      </p>
+                    <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end items-center">
                       <Button onClick={handleSaveClaim} className="shadow-lg shadow-blue-100">
                         Submit All Claims
                       </Button>

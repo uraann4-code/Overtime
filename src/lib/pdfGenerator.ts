@@ -12,13 +12,13 @@ export function generateOvertimePDF(user: any, claim: any) {
   
   // User Info
   doc.setFontSize(10);
-  doc.text(`NAME: ${user.name.toUpperCase()}`, 15, 25);
-  doc.text(`DESIGNATION: ${user.designation.toUpperCase()}`, 75, 25);
-  doc.text(`DEPARTMENT: ${user.department.toUpperCase()}`, 145, 25);
+  doc.text(`NAME: ${(user.name || '').toUpperCase()}`, 15, 25);
+  doc.text(`DESIGNATION: ${(user.designation || '').toUpperCase()}`, 75, 25);
+  doc.text(`DEPARTMENT: ${(user.department || '').toUpperCase()}`, 145, 25);
   
-  doc.text(`MONTH OF: ${claim.month.toUpperCase()} ${claim.year}`, 15, 32);
-  doc.text(`PAY SCALE: ${user.payScale}`, 75, 32);
-  doc.text(`BANK A/C NO: ${user.bankAccount} ${user.bankName.toUpperCase()}`, 115, 32);
+  doc.text(`MONTH OF: ${(claim.month || '').toUpperCase()} ${claim.year || ''}`, 15, 32);
+  doc.text(`PAY SCALE: ${user.payScale || ''}`, 75, 32);
+  doc.text(`BANK A/C NO: ${user.bankAccount || ''} ${(user.bankName || '').toUpperCase()}`, 115, 32);
   
   // Table
   const tableData = claim.entries.map((entry: any) => [
@@ -70,5 +70,5 @@ export function generateOvertimePDF(user: any, claim: any) {
   doc.text("HOD's Signature", 15, finalY + 45);
   doc.text('Director / Dy. Registrar (A) Signature', 195, finalY + 45, { align: 'right' });
   
-  doc.save(`Overtime_Claim_${user.name}_${claim.month}_${claim.year}.pdf`);
+  doc.save(`Overtime_Claim_${user.name || 'User'}_${claim.month || ''}_${claim.year || ''}.pdf`);
 }
