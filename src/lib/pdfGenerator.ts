@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { numberToWords } from './utils';
 
-export function generateOvertimePDF(user: any, claim: any) {
+export function generateOvertimePDF(user: any, claim: any, returnBlob: boolean = false) {
   const u = user || {};
   const doc = new jsPDF('p', 'mm', 'a4');
   
@@ -154,5 +154,9 @@ export function generateOvertimePDF(user: any, claim: any) {
   doc.text("HOD's Signature", 15, finalY + 70);
   doc.text('Director / Dy. Registrar (A) Signature', 195, finalY + 70, { align: 'right' });
   
-  doc.save(`Overtime_Claim_${u.name || 'User'}_${claim.month || ''}_${claim.year || ''}.pdf`);
+  if (returnBlob) {
+    return doc.output('blob');
+  } else {
+    doc.save(`Overtime_Claim_${u.name || 'User'}_${claim.month || ''}_${claim.year || ''}.pdf`);
+  }
 }

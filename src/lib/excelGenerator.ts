@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import { numberToWords } from './utils';
 
-export function generateOvertimeExcel(user: any, claim: any) {
+export function generateOvertimeExcel(user: any, claim: any, returnBlob: boolean = false) {
   const u = user || {};
   
   // Prepare headers
@@ -64,6 +64,10 @@ export function generateOvertimeExcel(user: any, claim: any) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Overtime Claim');
 
-  // Download Excel file
-  XLSX.writeFile(wb, `Overtime_Claim_${u.name || 'User'}_${claim.month || ''}_${claim.year || ''}.xlsx`);
+  if (returnBlob) {
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  } else {
+    XLSX.writeFile(wb, `Overtime_Claim_${u.name || 'User'}_${claim.month || ''}_${claim.year || ''}.xlsx`);
+  }
 }

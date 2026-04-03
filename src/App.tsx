@@ -7,6 +7,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn, getDayName, calculateHours, calculateAmount, numberToWords } from './lib/utils';
 import { generateOvertimePDF } from './lib/pdfGenerator';
 import { generateOvertimeExcel } from './lib/excelGenerator';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 
 const ADMIN_EMAIL = "uraann4@gmail.com";
 
@@ -142,6 +144,7 @@ export default function App() {
     date: '',
     natureOfDuty: 'Preparation and Conduct of exam'
   });
+  const [copiedTime, setCopiedTime] = useState<{fromTime: string, toTime: string, isGazettedHoliday: boolean} | null>(null);
 
   // Admin State
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -502,17 +505,31 @@ export default function App() {
       }
       
       // Generate PDF for the user
-      for (const { uid, claim, userName } of savedClaims) {
+      if (savedClaims.length === 1) {
+        const { uid, claim, userName } = savedClaims[0];
         const claimUser = allUsers.find(u => u.uid === uid) || profile;
         if (claimUser) {
           try {
             generateOvertimePDF(claimUser, claim);
-            // Small delay to prevent browser from blocking multiple downloads
-            await new Promise(resolve => setTimeout(resolve, 500));
           } catch (pdfError) {
             console.error('Error generating PDF for', userName, pdfError);
           }
         }
+      } else if (savedClaims.length > 1) {
+        const zip = new JSZip();
+        for (const { uid, claim, userName } of savedClaims) {
+          const claimUser = allUsers.find(u => u.uid === uid) || profile;
+          if (claimUser) {
+            try {
+              const pdfBlob = generateOvertimePDF(claimUser, claim, true) as Blob;
+              zip.file(`Overtime_Claim_${claimUser.name || userName}_${claim.month || ''}_${claim.year || ''}.pdf`, pdfBlob);
+            } catch (pdfError) {
+              console.error('Error generating PDF for', userName, pdfError);
+            }
+          }
+        }
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        saveAs(zipBlob, `Bulk_Overtime_Claims_${month}_${year}.zip`);
       }
       
       setEntries([]);
@@ -1123,14 +1140,19 @@ export default function App() {
                                 <td className="px-4 py-3 text-right">
                                   <div className="flex items-center justify-end gap-2">
                                     <button onClick={() => {
-                                      const newArr = selectedUserTimes.map(item => ({
-                                        ...item,
-                                        fromTime: su.fromTime,
-                                        toTime: su.toTime,
-                                        isGazettedHoliday: su.isGazettedHoliday
-                                      }));
+                                      const newArr = selectedUserTimes.map((item, i) => {
+                                        if (i > idx) {
+                                          return {
+                                            ...item,
+                                            fromTime: su.fromTime,
+                                            toTime: su.toTime,
+                                            isGazettedHoliday: su.isGazettedHoliday
+                                          };
+                                        }
+                                        return item;
+                                      });
                                       setSelectedUserTimes(newArr);
-                                    }} className="text-blue-500 hover:text-blue-700 p-1" title="Copy time & holiday status to all">
+                                    }} className="text-blue-500 hover:text-blue-700 p-1" title="Copy time & holiday status to all below">
                                       <Copy className="w-4 h-4" />
                                     </button>
                                     <button onClick={() => {
