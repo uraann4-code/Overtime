@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { auth, db, loginWithEmail, logout } from './firebase';
 import { onAuthStateChanged, User, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, deleteDoc, updateDoc, getDocFromCache, getDocFromServer } from 'firebase/firestore';
-import { Plus, Download, History, LogOut, User as UserIcon, FileText, Trash2, Calendar, Clock, DollarSign, Shield, Users, CheckCircle, XCircle, X } from 'lucide-react';
+import { Plus, Download, History, LogOut, User as UserIcon, FileText, Trash2, Calendar, Clock, DollarSign, Shield, Users, CheckCircle, XCircle, X, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, getDayName, calculateHours, calculateAmount, numberToWords } from './lib/utils';
 import { generateOvertimePDF } from './lib/pdfGenerator';
@@ -1086,7 +1086,7 @@ export default function App() {
                               <th className="px-4 py-3 w-32">From Time</th>
                               <th className="px-4 py-3 w-32">To Time</th>
                               <th className="px-4 py-3 w-24 text-center">Gazetted</th>
-                              <th className="px-4 py-3 w-10"></th>
+                              <th className="px-4 py-3 w-20 text-right">Actions</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200">
@@ -1121,13 +1121,26 @@ export default function App() {
                                   />
                                 </td>
                                 <td className="px-4 py-3 text-right">
-                                  <button onClick={() => {
-                                    const newArr = [...selectedUserTimes];
-                                    newArr.splice(idx, 1);
-                                    setSelectedUserTimes(newArr);
-                                  }} className="text-red-400 hover:text-red-600 p-1">
-                                    <X className="w-4 h-4" />
-                                  </button>
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button onClick={() => {
+                                      const newArr = selectedUserTimes.map(item => ({
+                                        ...item,
+                                        fromTime: su.fromTime,
+                                        toTime: su.toTime,
+                                        isGazettedHoliday: su.isGazettedHoliday
+                                      }));
+                                      setSelectedUserTimes(newArr);
+                                    }} className="text-blue-500 hover:text-blue-700 p-1" title="Copy time & holiday status to all">
+                                      <Copy className="w-4 h-4" />
+                                    </button>
+                                    <button onClick={() => {
+                                      const newArr = [...selectedUserTimes];
+                                      newArr.splice(idx, 1);
+                                      setSelectedUserTimes(newArr);
+                                    }} className="text-red-400 hover:text-red-600 p-1" title="Remove">
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             ))}

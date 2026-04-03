@@ -129,8 +129,8 @@ export function generateOvertimePDF(user: any, claim: any) {
     },
     foot: [[
       { content: 'TOTAL HOURS & AMOUNT', colSpan: 5, styles: { halign: 'center', fontStyle: 'bold' } },
-      { content: claim.totalHours.toString(), styles: { halign: 'center', fontStyle: 'bold' } },
-      { content: claim.totalAmount.toString(), styles: { halign: 'center', fontStyle: 'bold' } }
+      { content: (claim.totalHours || 0).toString(), styles: { halign: 'center', fontStyle: 'bold' } },
+      { content: (claim.totalAmount || 0).toString(), styles: { halign: 'center', fontStyle: 'bold' } }
     ]],
     footStyles: { font: 'helvetica', fillColor: [255, 255, 255], textColor: [0, 0, 0], lineWidth: 0.1, lineColor: [0, 0, 0] }
   });
@@ -145,7 +145,7 @@ export function generateOvertimePDF(user: any, claim: any) {
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(`Overtime @ Rs. ${weekdayRate} Per Hour for week days & Rs ${weekendRate} for weekend & Rs ${holidayRate} for gazetted holiday:`, 15, finalY + 15);
-  doc.text(`Total Claim Amount in Rupees: ${numberToWords(claim.totalAmount)}`, 15, finalY + 25);
+  doc.text(`Total Claim Amount in Rupees: ${numberToWords(claim.totalAmount || 0)}`, 15, finalY + 25);
   doc.text(`Employee's Sign:_________________`, 140, finalY + 25);
   
   doc.setFont('helvetica', 'bold');

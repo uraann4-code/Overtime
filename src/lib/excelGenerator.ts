@@ -31,10 +31,10 @@ export function generateOvertimeExcel(user: any, claim: any) {
 
   // Prepare footer
   const footerData = [
-    ['TOTAL HOURS & AMOUNT', '', '', '', '', claim.totalHours, claim.totalAmount],
+    ['TOTAL HOURS & AMOUNT', '', '', '', '', claim.totalHours || 0, claim.totalAmount || 0],
     [],
     [`Overtime @ Rs. ${u.weekdayRate || 120} Per Hour for week days & Rs ${u.weekendRate || 160} for weekend & Rs ${u.holidayRate || 200} for gazetted holiday:`],
-    [`Total Claim Amount in Rupees: ${numberToWords(claim.totalAmount)}`],
+    [`Total Claim Amount in Rupees: ${numberToWords(claim.totalAmount || 0)}`],
     [],
     ['', '', '', '', '', "Employee's Sign:_________________"],
     [],
