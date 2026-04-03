@@ -522,14 +522,17 @@ export default function App() {
           if (claimUser) {
             try {
               const pdfBlob = generateOvertimePDF(claimUser, claim, true) as Blob;
-              zip.file(`Overtime_Claim_${claimUser.name || userName}_${claim.month || ''}_${claim.year || ''}.pdf`, pdfBlob);
+              const safeName = (claimUser.name || userName || 'User').replace(/[^a-zA-Z0-9 _-]/g, '');
+              const safeMonth = (claim.month || '').replace(/[^a-zA-Z0-9 _-]/g, '');
+              zip.file(`Overtime_Claim_${safeName}_${safeMonth}_${claim.year || ''}.pdf`, pdfBlob);
             } catch (pdfError) {
               console.error('Error generating PDF for', userName, pdfError);
             }
           }
         }
         const zipBlob = await zip.generateAsync({ type: 'blob' });
-        saveAs(zipBlob, `Bulk_Overtime_Claims_${month}_${year}.zip`);
+        const safeMonthZip = (month || '').replace(/[^a-zA-Z0-9 _-]/g, '');
+        saveAs(zipBlob, `Bulk_Overtime_Claims_${safeMonthZip}_${year}.zip`);
       }
       
       setEntries([]);

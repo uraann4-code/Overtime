@@ -68,6 +68,8 @@ export function generateOvertimeExcel(user: any, claim: any, returnBlob: boolean
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   } else {
-    XLSX.writeFile(wb, `Overtime_Claim_${u.name || 'User'}_${claim.month || ''}_${claim.year || ''}.xlsx`);
+    const safeName = (u.name || 'User').replace(/[^a-zA-Z0-9 _-]/g, '');
+    const safeMonth = (claim.month || '').replace(/[^a-zA-Z0-9 _-]/g, '');
+    XLSX.writeFile(wb, `Overtime_Claim_${safeName}_${safeMonth}_${claim.year || ''}.xlsx`);
   }
 }

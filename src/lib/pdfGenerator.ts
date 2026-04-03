@@ -157,6 +157,8 @@ export function generateOvertimePDF(user: any, claim: any, returnBlob: boolean =
   if (returnBlob) {
     return doc.output('blob');
   } else {
-    doc.save(`Overtime_Claim_${u.name || 'User'}_${claim.month || ''}_${claim.year || ''}.pdf`);
+    const safeName = (u.name || 'User').replace(/[^a-zA-Z0-9 _-]/g, '');
+    const safeMonth = (claim.month || '').replace(/[^a-zA-Z0-9 _-]/g, '');
+    doc.save(`Overtime_Claim_${safeName}_${safeMonth}_${claim.year || ''}.pdf`);
   }
 }
