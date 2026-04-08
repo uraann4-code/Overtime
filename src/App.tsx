@@ -5,7 +5,7 @@ import { doc, getDoc, setDoc, collection, query, where, onSnapshot, addDoc, serv
 import { Plus, Download, History, LogOut, User as UserIcon, FileText, Trash2, Calendar, Clock, DollarSign, Shield, Users, CheckCircle, XCircle, X, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, getDayName, calculateHours, calculateAmount, numberToWords } from './lib/utils';
-import { generateOvertimePDF } from './lib/pdfGenerator';
+import { generateOvertimePDF, generateSummaryPDF, SummaryRow } from './lib/pdfGenerator';
 import { generateOvertimeExcel } from './lib/excelGenerator';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -379,19 +379,6 @@ export default function App() {
     setNewUserHolidayRate(200);
   };
 
-  const handleDeleteUser = async (uid: string, email: string) => {
-    if (window.confirm('Are you sure you want to delete this user?')) {
-      try {
-        await deleteDoc(doc(db, 'users', uid));
-        await deleteDoc(doc(db, 'allowed_users', email.toLowerCase()));
-        alert('User deleted successfully!');
-      } catch (error: any) {
-        console.error('Error deleting user:', error);
-        alert('Failed to delete user.');
-      }
-    }
-  };
-
   const handleAddAllowedUser = async () => {
     if (!newUserEmail || !newUserEmail.includes('@')) return;
     await setDoc(doc(db, 'allowed_users', newUserEmail.toLowerCase()), {
@@ -505,18 +492,11 @@ export default function App() {
       }
       
       // Generate PDF for the user
-      if (savedClaims.length === 1) {
-        const { uid, claim, userName } = savedClaims[0];
-        const claimUser = allUsers.find(u => u.uid === uid) || profile;
-        if (claimUser) {
-          try {
-            generateOvertimePDF(claimUser, claim);
-          } catch (pdfError) {
-            console.error('Error generating PDF for', userName, pdfError);
-          }
-        }
-      } else if (savedClaims.length > 1) {
+      if (savedClaims.length > 0) {
         const zip = new JSZip();
+        const summaryData: SummaryRow[] = [];
+        let srNo = 1;
+
         for (const { uid, claim, userName } of savedClaims) {
           const claimUser = allUsers.find(u => u.uid === uid) || profile;
           if (claimUser) {
@@ -525,11 +505,36 @@ export default function App() {
               const safeName = (claimUser.name || userName || 'User').replace(/[^a-zA-Z0-9 _-]/g, '');
               const safeMonth = (claim.month || '').replace(/[^a-zA-Z0-9 _-]/g, '');
               zip.file(`Overtime_Claim_${safeName}_${safeMonth}_${claim.year || ''}.pdf`, pdfBlob);
+              
+              // Calculate summary data
+              const weekdaysHours = claim.entries.filter((e: any) => !e.isGazettedHoliday && e.day !== 'Saturday' && e.day !== 'Sunday').reduce((sum: number, e: any) => sum + e.hours, 0);
+              const weekendHours = claim.entries.filter((e: any) => e.isGazettedHoliday || e.day === 'Saturday' || e.day === 'Sunday').reduce((sum: number, e: any) => sum + e.hours, 0);
+              
+              summaryData.push({
+                srNo: srNo++,
+                name: claimUser.name || userName || 'Unknown',
+                designation: claimUser.designation || '',
+                bankAccount: claimUser.bankAccount || '',
+                weekdaysHours,
+                weekendHours,
+                amount: claim.totalAmount || 0
+              });
             } catch (pdfError) {
               console.error('Error generating PDF for', userName, pdfError);
             }
           }
         }
+        
+        if (summaryData.length > 0) {
+          try {
+            const summaryBlob = generateSummaryPDF(month, year, summaryData, true) as Blob;
+            const safeMonthZip = (month || '').replace(/[^a-zA-Z0-9 _-]/g, '');
+            zip.file(`Summary_${safeMonthZip}_${year}.pdf`, summaryBlob);
+          } catch (summaryError) {
+            console.error('Error generating summary PDF', summaryError);
+          }
+        }
+
         const zipBlob = await zip.generateAsync({ type: 'blob' });
         const safeMonthZip = (month || '').replace(/[^a-zA-Z0-9 _-]/g, '');
         saveAs(zipBlob, `Bulk_Overtime_Claims_${safeMonthZip}_${year}.zip`);
@@ -838,9 +843,6 @@ export default function App() {
                                 <div className="flex items-center justify-end gap-2">
                                   <button onClick={() => handleEditUser(u)} className="text-blue-500 hover:text-blue-700 p-1">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-                                  </button>
-                                  <button onClick={() => handleDeleteUser(u.uid, u.email)} className="text-red-400 hover:text-red-600 p-1">
-                                    <Trash2 className="w-4 h-4" />
                                   </button>
                                 </div>
                               )}
