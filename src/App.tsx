@@ -672,18 +672,6 @@ export default function App() {
           >
             <Plus className="w-5 h-5" /> New Claim
           </button>
-          <button 
-            onClick={() => setView('history')}
-            className={cn('flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all', view === 'history' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-gray-600 hover:bg-gray-100')}
-          >
-            <History className="w-5 h-5" /> My History
-          </button>
-          <button 
-            onClick={() => setView('profile')}
-            className={cn('flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all', view === 'profile' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-gray-600 hover:bg-gray-100')}
-          >
-            <UserIcon className="w-5 h-5" /> My Profile
-          </button>
 
           {isAdmin && (
             <>
