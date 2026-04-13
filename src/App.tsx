@@ -142,6 +142,7 @@ export default function App() {
   const [toDate, setToDate] = useState('');
   const [commonFromTime, setCommonFromTime] = useState('18:30');
   const [commonToTime, setCommonToTime] = useState('19:30');
+  const [commonTimeDate, setCommonTimeDate] = useState('all');
   const [month, setMonth] = useState(new Date().toLocaleString('default', { month: 'short' }).toUpperCase());
   const [year, setYear] = useState(new Date().getFullYear());
   const [entries, setEntries] = useState<OvertimeEntry[]>([]);
@@ -382,11 +383,16 @@ export default function App() {
   };
 
   const handleApplyCommonTimeToAll = () => {
-    const updated = selectedUserTimes.map(su => ({
-      ...su,
-      fromTime: commonFromTime,
-      toTime: commonToTime
-    }));
+    const updated = selectedUserTimes.map(su => {
+      if (commonTimeDate === 'all' || su.date === commonTimeDate) {
+        return {
+          ...su,
+          fromTime: commonFromTime,
+          toTime: commonToTime
+        };
+      }
+      return su;
+    });
     setSelectedUserTimes(updated);
   };
 
@@ -1154,14 +1160,29 @@ export default function App() {
                         
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                           <label className="block text-sm font-medium text-gray-700 mb-2">Common Time Settings</label>
-                          <div className="flex items-end gap-2">
-                            <div className="flex-1">
-                              <Input type="time" label="From Time" value={commonFromTime} onChange={setCommonFromTime} />
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-end gap-2">
+                              <div className="flex-1">
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Apply To Date</label>
+                                <select 
+                                  className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all text-sm"
+                                  value={commonTimeDate}
+                                  onChange={(e) => setCommonTimeDate(e.target.value)}
+                                >
+                                  <option value="all">All Selected Dates</option>
+                                  {selectedDates.map(d => (
+                                    <option key={d} value={d}>{d}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="flex-1">
+                                <Input type="time" label="From Time" value={commonFromTime} onChange={setCommonFromTime} />
+                              </div>
+                              <div className="flex-1">
+                                <Input type="time" label="To Time" value={commonToTime} onChange={setCommonToTime} />
+                              </div>
                             </div>
-                            <div className="flex-1">
-                              <Input type="time" label="To Time" value={commonToTime} onChange={setCommonToTime} />
-                            </div>
-                            <Button onClick={handleApplyCommonTimeToAll} className="whitespace-nowrap bg-gray-800 hover:bg-gray-900">Apply to All</Button>
+                            <Button onClick={handleApplyCommonTimeToAll} className="w-full bg-gray-800 hover:bg-gray-900">Apply Time</Button>
                           </div>
                           <p className="text-xs text-gray-500 mt-2">This time will be used as default for new entries.</p>
                         </div>
@@ -1171,53 +1192,112 @@ export default function App() {
 
                   {/* User Specific Data */}
                   <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-2">
-                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Add User</label>
-                      <select 
-                        className="w-full md:w-1/2 px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
-                        value=""
-                        onChange={(e) => {
-                          const uid = e.target.value;
-                          if (!uid) return;
-                          if (selectedDates.length === 0) {
-                            alert("Please select at least one date first.");
-                            return;
-                          }
-                          if (selectedUserTimes.find(su => su.uid === uid)) return;
-                          const user = allUsers.find(u => u.uid === uid);
-                          if (user) {
-                            const newRows = selectedDates.map(date => ({
-                              uid: user.uid,
-                              name: user.name,
-                              designation: user.designation,
-                              payScale: user.payScale,
-                              date: date,
-                              fromTime: commonFromTime,
-                              toTime: commonToTime,
-                              isGazettedHoliday: false
-                            }));
-                            const updatedArr = [...selectedUserTimes, ...newRows];
-                            const userOrderMap = new Map();
-                            updatedArr.forEach((su, index) => {
-                              if (!userOrderMap.has(su.uid)) {
-                                userOrderMap.set(su.uid, index);
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-2">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Add User</label>
+                        <select 
+                          className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+                          value=""
+                          onChange={(e) => {
+                            const uid = e.target.value;
+                            if (!uid) return;
+                            if (selectedDates.length === 0) {
+                              alert("Please select at least one date first.");
+                              return;
+                            }
+                            if (selectedUserTimes.find(su => su.uid === uid)) return;
+                            const user = allUsers.find(u => u.uid === uid);
+                            if (user) {
+                              const newRows = selectedDates.map(date => ({
+                                uid: user.uid,
+                                name: user.name,
+                                designation: user.designation,
+                                payScale: user.payScale,
+                                date: date,
+                                fromTime: commonFromTime,
+                                toTime: commonToTime,
+                                isGazettedHoliday: false
+                              }));
+                              const updatedArr = [...selectedUserTimes, ...newRows];
+                              const userOrderMap = new Map();
+                              updatedArr.forEach((su, index) => {
+                                if (!userOrderMap.has(su.uid)) {
+                                  userOrderMap.set(su.uid, index);
+                                }
+                              });
+                              updatedArr.sort((a, b) => {
+                                const orderA = userOrderMap.get(a.uid);
+                                const orderB = userOrderMap.get(b.uid);
+                                if (orderA !== orderB) return orderA - orderB;
+                                return a.date.localeCompare(b.date);
+                              });
+                              setSelectedUserTimes(updatedArr);
+                            }
+                          }}
+                        >
+                          <option value="">Select a user to add...</option>
+                          {[...allUsers].sort((a, b) => (parseInt(b.payScale) || 0) - (parseInt(a.payScale) || 0)).map(u => (
+                            <option key={u.uid} value={u.uid}>{u.name} ({u.designation})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Add by Department</label>
+                        <select 
+                          className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+                          value=""
+                          onChange={(e) => {
+                            const dept = e.target.value;
+                            if (!dept) return;
+                            if (selectedDates.length === 0) {
+                              alert("Please select at least one date first.");
+                              return;
+                            }
+                            
+                            const usersInDept = allUsers.filter(u => u.department === dept);
+                            const newRowsToAdd: SelectedUserTime[] = [];
+                            
+                            usersInDept.forEach(user => {
+                              if (!selectedUserTimes.find(su => su.uid === user.uid)) {
+                                selectedDates.forEach(date => {
+                                  newRowsToAdd.push({
+                                    uid: user.uid,
+                                    name: user.name,
+                                    designation: user.designation,
+                                    payScale: user.payScale,
+                                    date: date,
+                                    fromTime: commonFromTime,
+                                    toTime: commonToTime,
+                                    isGazettedHoliday: false
+                                  });
+                                });
                               }
                             });
-                            updatedArr.sort((a, b) => {
-                              const orderA = userOrderMap.get(a.uid);
-                              const orderB = userOrderMap.get(b.uid);
-                              if (orderA !== orderB) return orderA - orderB;
-                              return a.date.localeCompare(b.date);
-                            });
-                            setSelectedUserTimes(updatedArr);
-                          }
-                        }}
-                      >
-                        <option value="">Select a user to add...</option>
-                        {[...allUsers].sort((a, b) => (parseInt(b.payScale) || 0) - (parseInt(a.payScale) || 0)).map(u => (
-                          <option key={u.uid} value={u.uid}>{u.name} ({u.designation})</option>
-                        ))}
-                      </select>
+
+                            if (newRowsToAdd.length > 0) {
+                              const updatedArr = [...selectedUserTimes, ...newRowsToAdd];
+                              const userOrderMap = new Map();
+                              updatedArr.forEach((su, index) => {
+                                if (!userOrderMap.has(su.uid)) {
+                                  userOrderMap.set(su.uid, index);
+                                }
+                              });
+                              updatedArr.sort((a, b) => {
+                                const orderA = userOrderMap.get(a.uid);
+                                const orderB = userOrderMap.get(b.uid);
+                                if (orderA !== orderB) return orderA - orderB;
+                                return a.date.localeCompare(b.date);
+                              });
+                              setSelectedUserTimes(updatedArr);
+                            }
+                          }}
+                        >
+                          <option value="">Select a department to add all...</option>
+                          {Array.from(new Set(allUsers.map(u => u.department).filter(Boolean))).sort().map(dept => (
+                            <option key={dept} value={dept}>{dept}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
 
                     {selectedUserTimes.length > 0 && (
