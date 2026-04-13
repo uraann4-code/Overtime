@@ -45,6 +45,7 @@ interface SelectedUserTime {
   uid: string;
   name: string;
   designation: string;
+  payScale: string;
   date: string;
   fromTime: string;
   toTime: string;
@@ -1001,17 +1002,24 @@ export default function App() {
                             setSelectedDates(newDates);
                             
                             // Add rows for existing unique users
-                            const uniqueUsers = Array.from(new Map<string, { uid: string, name: string, designation: string }>(selectedUserTimes.map(su => [su.uid, { uid: su.uid, name: su.name, designation: su.designation }])).values());
+                            const uniqueUsers = Array.from(new Map<string, { uid: string, name: string, designation: string, payScale: string }>(selectedUserTimes.map(su => [su.uid, { uid: su.uid, name: su.name, designation: su.designation, payScale: su.payScale }])).values());
                             const newRows = uniqueUsers.map(u => ({
                               uid: u.uid,
                               name: u.name,
                               designation: u.designation,
+                              payScale: u.payScale,
                               date: v,
                               fromTime: '18:30',
                               toTime: '19:30',
                               isGazettedHoliday: false
                             }));
-                            setSelectedUserTimes([...selectedUserTimes, ...newRows]);
+                            const updatedArr = [...selectedUserTimes, ...newRows];
+                            updatedArr.sort((a, b) => {
+                              const payDiff = (parseInt(b.payScale) || 0) - (parseInt(a.payScale) || 0);
+                              if (payDiff !== 0) return payDiff;
+                              return a.date.localeCompare(b.date);
+                            });
+                            setSelectedUserTimes(updatedArr);
                           }
                           setNewEntry({ ...newEntry, date: '' });
                         }} 
@@ -1056,17 +1064,24 @@ export default function App() {
                               uid: user.uid,
                               name: user.name,
                               designation: user.designation,
+                              payScale: user.payScale,
                               date: date,
                               fromTime: '18:30',
                               toTime: '19:30',
                               isGazettedHoliday: false
                             }));
-                            setSelectedUserTimes([...selectedUserTimes, ...newRows]);
+                            const updatedArr = [...selectedUserTimes, ...newRows];
+                            updatedArr.sort((a, b) => {
+                              const payDiff = (parseInt(b.payScale) || 0) - (parseInt(a.payScale) || 0);
+                              if (payDiff !== 0) return payDiff;
+                              return a.date.localeCompare(b.date);
+                            });
+                            setSelectedUserTimes(updatedArr);
                           }
                         }}
                       >
                         <option value="">Select a user to add...</option>
-                        {allUsers.map(u => (
+                        {[...allUsers].sort((a, b) => (parseInt(b.payScale) || 0) - (parseInt(a.payScale) || 0)).map(u => (
                           <option key={u.uid} value={u.uid}>{u.name} ({u.designation})</option>
                         ))}
                       </select>
