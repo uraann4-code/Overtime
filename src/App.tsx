@@ -1254,7 +1254,7 @@ export default function App() {
                               return;
                             }
                             
-                            const usersInDept = allUsers.filter(u => u.department === dept);
+                            const usersInDept = allUsers.filter(u => u.department === dept).sort((a, b) => (parseInt(b.payScale) || 0) - (parseInt(a.payScale) || 0));
                             const newRowsToAdd: SelectedUserTime[] = [];
                             
                             usersInDept.forEach(user => {
