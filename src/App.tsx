@@ -382,6 +382,14 @@ export default function App() {
     await updateDoc(doc(db, 'claims', claimId), { status });
   };
 
+  const getDefaultTimes = (dateStr: string) => {
+    const day = getDayName(dateStr);
+    if (day === 'Saturday' || day === 'Sunday') {
+      return { fromTime: '09:00', toTime: '17:00' };
+    }
+    return { fromTime: '18:30', toTime: '20:30' }; // 18:30 is 6:30 PM
+  };
+
   const handleApplyCommonTimeToAll = () => {
     const updated = selectedUserTimes.map(su => {
       if (commonTimeDate === 'all' || su.date === commonTimeDate) {
@@ -428,14 +436,15 @@ export default function App() {
       const newRows: SelectedUserTime[] = [];
       uniqueUsers.forEach(u => {
         newDatesToAdd.forEach(d => {
+          const { fromTime, toTime } = getDefaultTimes(d);
           newRows.push({
             uid: u.uid,
             name: u.name,
             designation: u.designation,
             payScale: u.payScale,
             date: d,
-            fromTime: commonFromTime,
-            toTime: commonToTime,
+            fromTime,
+            toTime,
             isGazettedHoliday: false
           });
         });
@@ -1088,14 +1097,15 @@ export default function App() {
                               
                               // Add rows for existing unique users
                               const uniqueUsers = Array.from(new Map<string, { uid: string, name: string, designation: string, payScale: string }>(selectedUserTimes.map(su => [su.uid, { uid: su.uid, name: su.name, designation: su.designation, payScale: su.payScale }])).values());
+                              const { fromTime, toTime } = getDefaultTimes(v);
                               const newRows = uniqueUsers.map(u => ({
                                 uid: u.uid,
                                 name: u.name,
                                 designation: u.designation,
                                 payScale: u.payScale,
                                 date: v,
-                                fromTime: commonFromTime,
-                                toTime: commonToTime,
+                                fromTime,
+                                toTime,
                                 isGazettedHoliday: false
                               }));
                               const updatedArr = [...selectedUserTimes, ...newRows];
@@ -1208,16 +1218,19 @@ export default function App() {
                             if (selectedUserTimes.find(su => su.uid === uid)) return;
                             const user = allUsers.find(u => u.uid === uid);
                             if (user) {
-                              const newRows = selectedDates.map(date => ({
-                                uid: user.uid,
-                                name: user.name,
-                                designation: user.designation,
-                                payScale: user.payScale,
-                                date: date,
-                                fromTime: commonFromTime,
-                                toTime: commonToTime,
-                                isGazettedHoliday: false
-                              }));
+                              const newRows = selectedDates.map(date => {
+                                const { fromTime, toTime } = getDefaultTimes(date);
+                                return {
+                                  uid: user.uid,
+                                  name: user.name,
+                                  designation: user.designation,
+                                  payScale: user.payScale,
+                                  date: date,
+                                  fromTime,
+                                  toTime,
+                                  isGazettedHoliday: false
+                                };
+                              });
                               const updatedArr = [...selectedUserTimes, ...newRows];
                               const userOrderMap = new Map();
                               updatedArr.forEach((su, index) => {
@@ -1260,14 +1273,15 @@ export default function App() {
                             usersInDept.forEach(user => {
                               if (!selectedUserTimes.find(su => su.uid === user.uid)) {
                                 selectedDates.forEach(date => {
+                                  const { fromTime, toTime } = getDefaultTimes(date);
                                   newRowsToAdd.push({
                                     uid: user.uid,
                                     name: user.name,
                                     designation: user.designation,
                                     payScale: user.payScale,
                                     date: date,
-                                    fromTime: commonFromTime,
-                                    toTime: commonToTime,
+                                    fromTime,
+                                    toTime,
                                     isGazettedHoliday: false
                                   });
                                 });
