@@ -138,6 +138,8 @@ export default function App() {
   // Form State
   const [selectedUserTimes, setSelectedUserTimes] = useState<SelectedUserTime[]>([]);
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [month, setMonth] = useState(new Date().toLocaleString('default', { month: 'short' }).toUpperCase());
   const [year, setYear] = useState(new Date().getFullYear());
   const [entries, setEntries] = useState<OvertimeEntry[]>([]);
@@ -375,6 +377,71 @@ export default function App() {
 
   const handleUpdateClaimStatus = async (claimId: string, status: 'approved' | 'rejected') => {
     await updateDoc(doc(db, 'claims', claimId), { status });
+  };
+
+  const handleAddDateRange = () => {
+    if (!fromDate || !toDate) {
+      alert("Please select both From and To dates.");
+      return;
+    }
+    const start = new Date(fromDate);
+    const end = new Date(toDate);
+    if (start > end) {
+      alert("From Date cannot be later than To Date.");
+      return;
+    }
+
+    const newDatesToAdd: string[] = [];
+    let current = new Date(start);
+    while (current <= end) {
+      const dateStr = current.toISOString().split('T')[0];
+      if (!selectedDates.includes(dateStr)) {
+        newDatesToAdd.push(dateStr);
+      }
+      current.setDate(current.getDate() + 1);
+    }
+
+    if (newDatesToAdd.length > 0) {
+      const newDates = [...selectedDates, ...newDatesToAdd].sort();
+      setSelectedDates(newDates);
+
+      // Add rows for existing unique users
+      const uniqueUsers = Array.from(new Map<string, { uid: string, name: string, designation: string, payScale: string }>(selectedUserTimes.map(su => [su.uid, { uid: su.uid, name: su.name, designation: su.designation, payScale: su.payScale }])).values());
+      
+      const newRows: SelectedUserTime[] = [];
+      uniqueUsers.forEach(u => {
+        newDatesToAdd.forEach(d => {
+          newRows.push({
+            uid: u.uid,
+            name: u.name,
+            designation: u.designation,
+            payScale: u.payScale,
+            date: d,
+            fromTime: '18:30',
+            toTime: '19:30',
+            isGazettedHoliday: false
+          });
+        });
+      });
+
+      const updatedArr = [...selectedUserTimes, ...newRows];
+      const userOrderMap = new Map();
+      updatedArr.forEach((su, index) => {
+        if (!userOrderMap.has(su.uid)) {
+          userOrderMap.set(su.uid, index);
+        }
+      });
+      updatedArr.sort((a, b) => {
+        const orderA = userOrderMap.get(a.uid);
+        const orderB = userOrderMap.get(b.uid);
+        if (orderA !== orderB) return orderA - orderB;
+        return a.date.localeCompare(b.date);
+      });
+      setSelectedUserTimes(updatedArr);
+    }
+    
+    setFromDate('');
+    setToDate('');
   };
 
   const handleAddEntry = () => {
@@ -990,64 +1057,91 @@ export default function App() {
                   </h3>
                   
                   {/* Common Data */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 pb-4 border-b border-gray-100">
-                    <div className="flex flex-col gap-2">
-                      <Input 
-                        label="Add Date (Common)" 
-                        type="date" 
-                        value={newEntry.date} 
-                        onChange={(v: string) => {
-                          if (v && !selectedDates.includes(v)) {
-                            const newDates = [...selectedDates, v].sort();
-                            setSelectedDates(newDates);
-                            
-                            // Add rows for existing unique users
-                            const uniqueUsers = Array.from(new Map<string, { uid: string, name: string, designation: string, payScale: string }>(selectedUserTimes.map(su => [su.uid, { uid: su.uid, name: su.name, designation: su.designation, payScale: su.payScale }])).values());
-                            const newRows = uniqueUsers.map(u => ({
-                              uid: u.uid,
-                              name: u.name,
-                              designation: u.designation,
-                              payScale: u.payScale,
-                              date: v,
-                              fromTime: '18:30',
-                              toTime: '19:30',
-                              isGazettedHoliday: false
-                            }));
-                            const updatedArr = [...selectedUserTimes, ...newRows];
-                            const userOrderMap = new Map();
-                            updatedArr.forEach((su, index) => {
-                              if (!userOrderMap.has(su.uid)) {
-                                userOrderMap.set(su.uid, index);
-                              }
-                            });
-                            updatedArr.sort((a, b) => {
-                              const orderA = userOrderMap.get(a.uid);
-                              const orderB = userOrderMap.get(b.uid);
-                              if (orderA !== orderB) return orderA - orderB;
-                              return a.date.localeCompare(b.date);
-                            });
-                            setSelectedUserTimes(updatedArr);
-                          }
-                          setNewEntry({ ...newEntry, date: '' });
-                        }} 
-                      />
-                      {selectedDates.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {selectedDates.map(d => (
-                            <span key={d} className="bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-xs flex items-center gap-1 font-medium">
-                              {d}
-                              <button onClick={() => {
-                                setSelectedDates(selectedDates.filter(sd => sd !== d));
-                                setSelectedUserTimes(selectedUserTimes.filter(su => su.date !== d));
-                              }} className="hover:text-red-500">
-                                <X className="w-3 h-3" />
-                              </button>
-                            </span>
-                          ))}
+                  <div className="mb-4 pb-4 border-b border-gray-100">
+                    <div className="flex flex-col lg:flex-row gap-6 mb-4">
+                      <div className="flex-1 flex flex-col gap-2">
+                        <Input 
+                          label="Add Single Date" 
+                          type="date" 
+                          value={newEntry.date} 
+                          onChange={(v: string) => {
+                            if (v && !selectedDates.includes(v)) {
+                              const newDates = [...selectedDates, v].sort();
+                              setSelectedDates(newDates);
+                              
+                              // Add rows for existing unique users
+                              const uniqueUsers = Array.from(new Map<string, { uid: string, name: string, designation: string, payScale: string }>(selectedUserTimes.map(su => [su.uid, { uid: su.uid, name: su.name, designation: su.designation, payScale: su.payScale }])).values());
+                              const newRows = uniqueUsers.map(u => ({
+                                uid: u.uid,
+                                name: u.name,
+                                designation: u.designation,
+                                payScale: u.payScale,
+                                date: v,
+                                fromTime: '18:30',
+                                toTime: '19:30',
+                                isGazettedHoliday: false
+                              }));
+                              const updatedArr = [...selectedUserTimes, ...newRows];
+                              const userOrderMap = new Map();
+                              updatedArr.forEach((su, index) => {
+                                if (!userOrderMap.has(su.uid)) {
+                                  userOrderMap.set(su.uid, index);
+                                }
+                              });
+                              updatedArr.sort((a, b) => {
+                                const orderA = userOrderMap.get(a.uid);
+                                const orderB = userOrderMap.get(b.uid);
+                                if (orderA !== orderB) return orderA - orderB;
+                                return a.date.localeCompare(b.date);
+                              });
+                              setSelectedUserTimes(updatedArr);
+                            }
+                            setNewEntry({ ...newEntry, date: '' });
+                          }} 
+                        />
+                      </div>
+                      
+                      <div className="flex items-center justify-center font-bold text-gray-400 pt-6">OR</div>
+                      
+                      <div className="flex-[2] flex flex-col gap-2">
+                        <label className="block text-sm font-medium text-gray-700">Add Date Range</label>
+                        <div className="flex items-end gap-2">
+                          <div className="flex-1">
+                            <Input type="date" value={fromDate} onChange={setFromDate} />
+                          </div>
+                          <div className="flex-1">
+                            <Input type="date" value={toDate} onChange={setToDate} />
+                          </div>
+                          <Button onClick={handleAddDateRange} className="whitespace-nowrap">Add Range</Button>
                         </div>
-                      )}
+                      </div>
                     </div>
-                    <Input label="Nature of Duty (Common)" value={newEntry.natureOfDuty} onChange={(v: string) => setNewEntry({ ...newEntry, natureOfDuty: v })} />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        {selectedDates.length > 0 && (
+                          <div className="flex flex-col gap-2">
+                            <label className="block text-sm font-medium text-gray-700">Selected Dates ({selectedDates.length})</label>
+                            <div className="flex flex-wrap gap-1">
+                              {selectedDates.map(d => (
+                                <span key={d} className="bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-xs flex items-center gap-1 font-medium">
+                                  {d}
+                                  <button onClick={() => {
+                                    setSelectedDates(selectedDates.filter(sd => sd !== d));
+                                    setSelectedUserTimes(selectedUserTimes.filter(su => su.date !== d));
+                                  }} className="hover:text-red-500">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <Input label="Nature of Duty (Common)" value={newEntry.natureOfDuty} onChange={(v: string) => setNewEntry({ ...newEntry, natureOfDuty: v })} />
+                      </div>
+                    </div>
                   </div>
 
                   {/* User Specific Data */}
