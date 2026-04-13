@@ -16,7 +16,7 @@ const ADMIN_EMAIL = "uraann4@gmail.com";
 interface UserProfile {
   uid: string;
   name: string;
-  email: string;
+  email?: string;
   designation: string;
   department: string;
   payScale: string;
@@ -147,7 +147,7 @@ export default function App() {
   const [copiedTime, setCopiedTime] = useState<{fromTime: string, toTime: string, isGazettedHoliday: boolean} | null>(null);
 
   // Admin State
-  const [newUserEmail, setNewUserEmail] = useState('');
+  const [whitelistEmail, setWhitelistEmail] = useState('');
   const [newUserName, setNewUserName] = useState('');
   const [newUserDesignation, setNewUserDesignation] = useState('');
   const [newUserDepartment, setNewUserDepartment] = useState('');
@@ -286,12 +286,11 @@ export default function App() {
   };
 
   const handleAdminCreateUser = async () => {
-    if (!newUserEmail || !newUserName) return;
+    if (!newUserName) return;
     setIsAdminCreating(true);
     try {
       const userData = {
         name: newUserName,
-        email: newUserEmail,
         designation: newUserDesignation,
         department: newUserDepartment,
         payScale: newUserPayScale,
@@ -305,16 +304,6 @@ export default function App() {
 
       if (editingUserId) {
         await updateDoc(doc(db, 'users', editingUserId), userData);
-        
-        const oldUser = allUsers.find(u => u.uid === editingUserId);
-        if (oldUser && oldUser.email !== newUserEmail) {
-          await deleteDoc(doc(db, 'allowed_users', oldUser.email.toLowerCase()));
-          await setDoc(doc(db, 'allowed_users', newUserEmail.toLowerCase()), {
-            email: newUserEmail.toLowerCase(),
-            addedAt: serverTimestamp()
-          });
-        }
-        
         alert('User updated successfully!');
       } else {
         const newUserRef = doc(collection(db, 'users'));
@@ -322,17 +311,10 @@ export default function App() {
           ...userData,
           uid: newUserRef.id
         });
-        
-        // Also add to allowed_users
-        await setDoc(doc(db, 'allowed_users', newUserEmail.toLowerCase()), {
-          email: newUserEmail.toLowerCase(),
-          addedAt: serverTimestamp()
-        });
         alert('User created successfully!');
       }
 
       setEditingUserId(null);
-      setNewUserEmail('');
       setNewUserName('');
       setNewUserDesignation('');
       setNewUserDepartment('');
@@ -353,7 +335,6 @@ export default function App() {
   const handleEditUser = (user: UserProfile) => {
     setEditingUserId(user.uid);
     setNewUserName(user.name || '');
-    setNewUserEmail(user.email || '');
     setNewUserDesignation(user.designation || '');
     setNewUserDepartment(user.department || '');
     setNewUserPayScale(user.payScale || '');
@@ -367,7 +348,6 @@ export default function App() {
 
   const handleCancelEdit = () => {
     setEditingUserId(null);
-    setNewUserEmail('');
     setNewUserName('');
     setNewUserDesignation('');
     setNewUserDepartment('');
@@ -380,12 +360,12 @@ export default function App() {
   };
 
   const handleAddAllowedUser = async () => {
-    if (!newUserEmail || !newUserEmail.includes('@')) return;
-    await setDoc(doc(db, 'allowed_users', newUserEmail.toLowerCase()), {
-      email: newUserEmail.toLowerCase(),
+    if (!whitelistEmail || !whitelistEmail.includes('@')) return;
+    await setDoc(doc(db, 'allowed_users', whitelistEmail.toLowerCase()), {
+      email: whitelistEmail.toLowerCase(),
       addedAt: serverTimestamp()
     });
-    setNewUserEmail('');
+    setWhitelistEmail('');
   };
 
   const handleRemoveAllowedUser = async (email: string) => {
@@ -726,7 +706,7 @@ export default function App() {
               >
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                   <h2 className="text-xl font-bold mb-4">{editingUserId ? 'Edit User' : 'Create New User'}</h2>
-                  <p className="text-sm text-gray-500 mb-6">{editingUserId ? 'Update staff account details.' : 'Create a new staff account with email and password.'}</p>
+                  <p className="text-sm text-gray-500 mb-6">{editingUserId ? 'Update staff details.' : 'Create a new staff record.'}</p>
                   
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <Input 
@@ -734,12 +714,6 @@ export default function App() {
                       placeholder="John Doe" 
                       value={newUserName} 
                       onChange={setNewUserName}
-                    />
-                    <Input 
-                      label="Email Address"
-                      placeholder="user@example.com" 
-                      value={newUserEmail} 
-                      onChange={setNewUserEmail}
                     />
                     <Input 
                       label="Designation"
@@ -812,21 +786,33 @@ export default function App() {
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
-                      <thead className="bg-gray-50 text-gray-600 uppercase text-xs font-bold">
+                      <thead className="bg-gray-50 text-gray-600 uppercase text-[10px] font-bold tracking-wider">
                         <tr>
-                          <th className="px-6 py-4">Name</th>
-                          <th className="px-6 py-4">Email</th>
-                          <th className="px-6 py-4">Designation</th>
-                          <th className="px-6 py-4 text-right">Actions</th>
+                          <th className="px-4 py-3">Name</th>
+                          <th className="px-4 py-3">Designation / Dept</th>
+                          <th className="px-4 py-3 text-center">Pay Scale</th>
+                          <th className="px-4 py-3">Bank Details</th>
+                          <th className="px-4 py-3 text-center">Rates (W/WE/H)</th>
+                          <th className="px-4 py-3 text-right">Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {allUsers.map((u) => (
+                      <tbody className="divide-y divide-gray-100 text-xs">
+                        {[...allUsers].sort((a, b) => (parseInt(b.payScale) || 0) - (parseInt(a.payScale) || 0)).map((u) => (
                           <tr key={u.uid} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 font-medium">{u.name}</td>
-                            <td className="px-6 py-4 text-gray-500">{u.email}</td>
-                            <td className="px-6 py-4 text-gray-500">{u.designation}</td>
-                            <td className="px-6 py-4 text-right">
+                            <td className="px-4 py-3 font-medium text-gray-900">{u.name}</td>
+                            <td className="px-4 py-3 text-gray-600">
+                              <div className="font-medium">{u.designation}</div>
+                              <div className="text-[10px] text-gray-400">{u.department}</div>
+                            </td>
+                            <td className="px-4 py-3 text-center font-medium">{u.payScale}</td>
+                            <td className="px-4 py-3 text-gray-600">
+                              <div className="font-medium">{u.bankAccount}</div>
+                              <div className="text-[10px] text-gray-400">{u.bankName}</div>
+                            </td>
+                            <td className="px-4 py-3 text-center text-gray-500">
+                              {u.weekdayRate} / {u.weekendRate} / {u.holidayRate}
+                            </td>
+                            <td className="px-4 py-3 text-right">
                               {u.email !== ADMIN_EMAIL && (
                                 <div className="flex items-center justify-end gap-2">
                                   <button onClick={() => handleEditUser(u)} className="text-blue-500 hover:text-blue-700 p-1">
@@ -839,7 +825,7 @@ export default function App() {
                         ))}
                         {allUsers.length === 0 && (
                           <tr>
-                            <td colSpan={4} className="px-6 py-12 text-center text-gray-400 italic">No staff members registered yet.</td>
+                            <td colSpan={6} className="px-4 py-12 text-center text-gray-400 italic">No staff members registered yet.</td>
                           </tr>
                         )}
                       </tbody>
@@ -854,8 +840,8 @@ export default function App() {
                   <div className="flex gap-2">
                     <Input 
                       placeholder="Enter email to whitelist" 
-                      value={newUserEmail} 
-                      onChange={setNewUserEmail}
+                      value={whitelistEmail} 
+                      onChange={setWhitelistEmail}
                       className="flex-1"
                     />
                     <Button onClick={handleAddAllowedUser}>
