@@ -140,6 +140,8 @@ export default function App() {
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [commonFromTime, setCommonFromTime] = useState('18:30');
+  const [commonToTime, setCommonToTime] = useState('19:30');
   const [month, setMonth] = useState(new Date().toLocaleString('default', { month: 'short' }).toUpperCase());
   const [year, setYear] = useState(new Date().getFullYear());
   const [entries, setEntries] = useState<OvertimeEntry[]>([]);
@@ -379,6 +381,15 @@ export default function App() {
     await updateDoc(doc(db, 'claims', claimId), { status });
   };
 
+  const handleApplyCommonTimeToAll = () => {
+    const updated = selectedUserTimes.map(su => ({
+      ...su,
+      fromTime: commonFromTime,
+      toTime: commonToTime
+    }));
+    setSelectedUserTimes(updated);
+  };
+
   const handleAddDateRange = () => {
     if (!fromDate || !toDate) {
       alert("Please select both From and To dates.");
@@ -417,8 +428,8 @@ export default function App() {
             designation: u.designation,
             payScale: u.payScale,
             date: d,
-            fromTime: '18:30',
-            toTime: '19:30',
+            fromTime: commonFromTime,
+            toTime: commonToTime,
             isGazettedHoliday: false
           });
         });
@@ -1077,8 +1088,8 @@ export default function App() {
                                 designation: u.designation,
                                 payScale: u.payScale,
                                 date: v,
-                                fromTime: '18:30',
-                                toTime: '19:30',
+                                fromTime: commonFromTime,
+                                toTime: commonToTime,
                                 isGazettedHoliday: false
                               }));
                               const updatedArr = [...selectedUserTimes, ...newRows];
@@ -1138,8 +1149,22 @@ export default function App() {
                           </div>
                         )}
                       </div>
-                      <div>
+                      <div className="flex flex-col gap-4">
                         <Input label="Nature of Duty (Common)" value={newEntry.natureOfDuty} onChange={(v: string) => setNewEntry({ ...newEntry, natureOfDuty: v })} />
+                        
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Common Time Settings</label>
+                          <div className="flex items-end gap-2">
+                            <div className="flex-1">
+                              <Input type="time" label="From Time" value={commonFromTime} onChange={setCommonFromTime} />
+                            </div>
+                            <div className="flex-1">
+                              <Input type="time" label="To Time" value={commonToTime} onChange={setCommonToTime} />
+                            </div>
+                            <Button onClick={handleApplyCommonTimeToAll} className="whitespace-nowrap bg-gray-800 hover:bg-gray-900">Apply to All</Button>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-2">This time will be used as default for new entries.</p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1167,8 +1192,8 @@ export default function App() {
                               designation: user.designation,
                               payScale: user.payScale,
                               date: date,
-                              fromTime: '18:30',
-                              toTime: '19:30',
+                              fromTime: commonFromTime,
+                              toTime: commonToTime,
                               isGazettedHoliday: false
                             }));
                             const updatedArr = [...selectedUserTimes, ...newRows];
