@@ -1014,9 +1014,16 @@ export default function App() {
                               isGazettedHoliday: false
                             }));
                             const updatedArr = [...selectedUserTimes, ...newRows];
+                            const userOrderMap = new Map();
+                            updatedArr.forEach((su, index) => {
+                              if (!userOrderMap.has(su.uid)) {
+                                userOrderMap.set(su.uid, index);
+                              }
+                            });
                             updatedArr.sort((a, b) => {
-                              const payDiff = (parseInt(b.payScale) || 0) - (parseInt(a.payScale) || 0);
-                              if (payDiff !== 0) return payDiff;
+                              const orderA = userOrderMap.get(a.uid);
+                              const orderB = userOrderMap.get(b.uid);
+                              if (orderA !== orderB) return orderA - orderB;
                               return a.date.localeCompare(b.date);
                             });
                             setSelectedUserTimes(updatedArr);
@@ -1071,9 +1078,16 @@ export default function App() {
                               isGazettedHoliday: false
                             }));
                             const updatedArr = [...selectedUserTimes, ...newRows];
+                            const userOrderMap = new Map();
+                            updatedArr.forEach((su, index) => {
+                              if (!userOrderMap.has(su.uid)) {
+                                userOrderMap.set(su.uid, index);
+                              }
+                            });
                             updatedArr.sort((a, b) => {
-                              const payDiff = (parseInt(b.payScale) || 0) - (parseInt(a.payScale) || 0);
-                              if (payDiff !== 0) return payDiff;
+                              const orderA = userOrderMap.get(a.uid);
+                              const orderB = userOrderMap.get(b.uid);
+                              if (orderA !== orderB) return orderA - orderB;
                               return a.date.localeCompare(b.date);
                             });
                             setSelectedUserTimes(updatedArr);
