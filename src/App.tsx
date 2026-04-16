@@ -63,6 +63,8 @@ interface OvertimeClaim {
   totalAmount: number;
   createdAt: any;
   status: 'pending' | 'approved' | 'rejected';
+  department?: string;
+  createdBy?: string;
 }
 
 interface AllowedUser {
@@ -160,6 +162,8 @@ export default function App() {
   const [newUserPayScale, setNewUserPayScale] = useState('');
   const [newUserBankAccount, setNewUserBankAccount] = useState('');
   const [newUserBankName, setNewUserBankName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'user' | 'admin' | 'operator'>('user');
   const [newUserWeekdayRate, setNewUserWeekdayRate] = useState(120);
   const [newUserWeekendRate, setNewUserWeekendRate] = useState(160);
   const [newUserHolidayRate, setNewUserHolidayRate] = useState(200);
@@ -230,10 +234,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !profile) return;
 
     // Fetch User Claims
-    const q = query(collection(db, 'claims'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'));
+    let q;
+    if (profile.role === 'admin') {
+      q = query(collection(db, 'claims'), orderBy('createdAt', 'desc'));
+    } else if (profile.role === 'operator') {
+      q = query(collection(db, 'claims'), where('department', '==', profile.department), orderBy('createdAt', 'desc'));
+    } else {
+      q = query(collection(db, 'claims'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'));
+    }
     const unsubClaims = onSnapshot(q, (snapshot) => {
       setClaims(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as OvertimeClaim)));
     }, (error) => {
@@ -297,12 +308,13 @@ export default function App() {
     try {
       const userData = {
         name: newUserName,
+        email: newUserEmail.toLowerCase(),
         designation: newUserDesignation,
         department: newUserDepartment,
         payScale: newUserPayScale,
         bankAccount: newUserBankAccount,
         bankName: newUserBankName,
-        role: 'user',
+        role: newUserRole,
         weekdayRate: newUserWeekdayRate,
         weekendRate: newUserWeekendRate,
         holidayRate: newUserHolidayRate
@@ -310,6 +322,12 @@ export default function App() {
 
       if (editingUserId) {
         await updateDoc(doc(db, 'users', editingUserId), userData);
+        if (newUserEmail) {
+          await setDoc(doc(db, 'allowed_users', newUserEmail.toLowerCase()), {
+            email: newUserEmail.toLowerCase(),
+            addedAt: serverTimestamp()
+          });
+        }
         alert('User updated successfully!');
       } else {
         const newUserRef = doc(collection(db, 'users'));
@@ -317,11 +335,19 @@ export default function App() {
           ...userData,
           uid: newUserRef.id
         });
+        if (newUserEmail) {
+          await setDoc(doc(db, 'allowed_users', newUserEmail.toLowerCase()), {
+            email: newUserEmail.toLowerCase(),
+            addedAt: serverTimestamp()
+          });
+        }
         alert('User created successfully!');
       }
 
       setEditingUserId(null);
       setNewUserName('');
+      setNewUserEmail('');
+      setNewUserRole('user');
       setNewUserDesignation('');
       setNewUserDepartment('');
       setNewUserPayScale('');
@@ -346,6 +372,8 @@ export default function App() {
     setNewUserPayScale(user.payScale || '');
     setNewUserBankAccount(user.bankAccount || '');
     setNewUserBankName(user.bankName || '');
+    setNewUserEmail(user.email || '');
+    setNewUserRole(user.role || 'user');
     setNewUserWeekdayRate(user.weekdayRate || 120);
     setNewUserWeekendRate(user.weekendRate || 160);
     setNewUserHolidayRate(user.holidayRate || 200);
@@ -360,6 +388,8 @@ export default function App() {
     setNewUserPayScale('');
     setNewUserBankAccount('');
     setNewUserBankName('');
+    setNewUserEmail('');
+    setNewUserRole('user');
     setNewUserWeekdayRate(120);
     setNewUserWeekendRate(160);
     setNewUserHolidayRate(200);
@@ -537,6 +567,7 @@ export default function App() {
         
         const totalHours = userEntries.reduce((sum, e) => sum + e.hours, 0);
         const totalAmount = userEntries.reduce((sum, e) => sum + e.amount, 0);
+        const targetUser = allUsers.find(u => u.uid === uid);
         
         const claim: OvertimeClaim = {
           uid: uid || '',
@@ -558,7 +589,9 @@ export default function App() {
           totalHours: totalHours || 0,
           totalAmount: totalAmount || 0,
           status: 'pending',
-          createdAt: serverTimestamp()
+          createdAt: serverTimestamp(),
+          department: targetUser?.department || profile?.department || '',
+          createdBy: user.uid
         };
         
         await addDoc(collection(db, 'claims'), claim);
@@ -839,6 +872,24 @@ export default function App() {
                       value={newUserBankName} 
                       onChange={setNewUserBankName}
                     />
+                    <Input 
+                      label="Login Email (Optional)"
+                      placeholder="user@example.com" 
+                      value={newUserEmail} 
+                      onChange={setNewUserEmail}
+                    />
+                    <div className="flex flex-col gap-2">
+                      <label className="block text-sm font-medium text-gray-700">User Role</label>
+                      <select 
+                        className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+                        value={newUserRole}
+                        onChange={(e) => setNewUserRole(e.target.value as any)}
+                      >
+                        <option value="user">Staff Member</option>
+                        <option value="operator">Department Operator</option>
+                        <option value="admin">Super Admin</option>
+                      </select>
+                    </div>
                     <Input 
                       label="Weekday Rate"
                       type="number"
@@ -1249,9 +1300,12 @@ export default function App() {
                           }}
                         >
                           <option value="">Select a user to add...</option>
-                          {[...allUsers].sort((a, b) => (parseInt(b.payScale) || 0) - (parseInt(a.payScale) || 0)).map(u => (
-                            <option key={u.uid} value={u.uid}>{u.name} ({u.designation})</option>
-                          ))}
+                          {[...allUsers]
+                            .filter(u => isAdmin || !profile?.department || u.department === profile.department)
+                            .sort((a, b) => (parseInt(b.payScale) || 0) - (parseInt(a.payScale) || 0))
+                            .map(u => (
+                              <option key={u.uid} value={u.uid}>{u.name} ({u.designation})</option>
+                            ))}
                         </select>
                       </div>
                       <div className="flex flex-col gap-2">
@@ -1307,9 +1361,12 @@ export default function App() {
                           }}
                         >
                           <option value="">Select a department to add all...</option>
-                          {Array.from(new Set(allUsers.map(u => u.department).filter(Boolean))).sort().map(dept => (
-                            <option key={dept} value={dept}>{dept}</option>
-                          ))}
+                          {Array.from(new Set(allUsers.map(u => u.department).filter(Boolean)))
+                            .filter(dept => isAdmin || !profile?.department || dept === profile.department)
+                            .sort()
+                            .map(dept => (
+                              <option key={dept} value={dept}>{dept}</option>
+                            ))}
                         </select>
                       </div>
                     </div>
