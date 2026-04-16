@@ -128,7 +128,7 @@ export default function App() {
   const [allClaims, setAllClaims] = useState<OvertimeClaim[]>([]);
   const [allowedUsers, setAllowedUsers] = useState<AllowedUser[]>([]);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
-  const [view, setView] = useState<'form' | 'history' | 'profile' | 'admin_users' | 'admin_claims'>('form');
+  const [view, setView] = useState<'form' | 'history' | 'profile' | 'admin_users' | 'admin_claims' | 'dept_dashboard'>('form');
   const [loading, setLoading] = useState(true);
   const [isAllowed, setIsAllowed] = useState(true);
   const [dbConnected, setDbConnected] = useState<boolean | null>(null);
@@ -171,6 +171,7 @@ export default function App() {
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
 
   const isAdmin = profile?.role === 'admin';
+  const isOperator = profile?.role === 'operator';
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -236,26 +237,24 @@ export default function App() {
   useEffect(() => {
     if (!user || !profile) return;
 
-    // Fetch User Claims
-    let q;
+    // Fetch Claims
+    let claimsQuery;
     if (profile.role === 'admin') {
-      q = query(collection(db, 'claims'), orderBy('createdAt', 'desc'));
+      claimsQuery = query(collection(db, 'claims'), orderBy('createdAt', 'desc'));
     } else if (profile.role === 'operator') {
-      q = query(collection(db, 'claims'), where('department', '==', profile.department), orderBy('createdAt', 'desc'));
+      claimsQuery = query(collection(db, 'claims'), where('department', '==', profile.department), orderBy('createdAt', 'desc'));
     } else {
-      q = query(collection(db, 'claims'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'));
+      claimsQuery = query(collection(db, 'claims'), where('uid', '==', user.uid), orderBy('createdAt', 'desc'));
     }
-    const unsubClaims = onSnapshot(q, (snapshot) => {
-      setClaims(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as OvertimeClaim)));
+    
+    const unsubClaims = onSnapshot(claimsQuery, (snapshot) => {
+      const fetchedClaims = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as OvertimeClaim));
+      setClaims(fetchedClaims);
+      if (profile.role === 'admin' || profile.role === 'operator') {
+        setAllClaims(fetchedClaims);
+      }
     }, (error) => {
       console.error("Error fetching claims:", error);
-    });
-
-    // Fetch All Claims
-    const unsubAllClaims = onSnapshot(query(collection(db, 'claims'), orderBy('createdAt', 'desc')), (snapshot) => {
-      setAllClaims(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as OvertimeClaim)));
-    }, (error) => {
-      console.error("Error fetching all claims:", error);
     });
 
     // Fetch Allowed Users
@@ -266,7 +265,15 @@ export default function App() {
     });
 
     // Fetch All Users
-    const unsubAllUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+    let usersQuery;
+    if (profile.role === 'admin') {
+      usersQuery = query(collection(db, 'users'));
+    } else if (profile.role === 'operator') {
+      usersQuery = query(collection(db, 'users'), where('department', '==', profile.department));
+    } else {
+      usersQuery = query(collection(db, 'users'), where('uid', '==', user.uid));
+    }
+    const unsubAllUsers = onSnapshot(usersQuery, (snapshot) => {
       setAllUsers(snapshot.docs.map(d => ({ ...d.data(), uid: d.id } as UserProfile)));
     }, (error) => {
       console.error("Error fetching all users:", error);
@@ -274,11 +281,10 @@ export default function App() {
 
     return () => {
       unsubClaims();
-      unsubAllClaims();
       unsubUsers();
       unsubAllUsers();
     };
-  }, [user]);
+  }, [user, profile]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -758,6 +764,7 @@ export default function App() {
             </div>
             <span className="text-sm font-medium text-gray-700">{user.displayName || user.email?.split('@')[0]}</span>
             {isAdmin && <Badge variant="blue">Admin</Badge>}
+            {isOperator && <Badge variant="green">Operator</Badge>}
           </div>
           <button
             onClick={() => auth.signOut()}
@@ -779,6 +786,18 @@ export default function App() {
           >
             <Plus className="w-5 h-5" /> New Claim
           </button>
+          <button 
+            onClick={() => setView('history')}
+            className={cn('flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all', view === 'history' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-gray-600 hover:bg-gray-100')}
+          >
+            <History className="w-5 h-5" /> My History
+          </button>
+          <button 
+            onClick={() => setView('profile')}
+            className={cn('flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all', view === 'profile' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-gray-600 hover:bg-gray-100')}
+          >
+            <UserIcon className="w-5 h-5" /> My Profile
+          </button>
 
           {isAdmin && (
             <>
@@ -794,6 +813,18 @@ export default function App() {
                 className={cn('flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all', view === 'admin_users' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-gray-600 hover:bg-gray-100')}
               >
                 <Users className="w-5 h-5" /> Manage Users
+              </button>
+            </>
+          )}
+
+          {isOperator && (
+            <>
+              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-4 mt-6 mb-1">Department Panel</div>
+              <button 
+                onClick={() => setView('dept_dashboard')}
+                className={cn('flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all', view === 'dept_dashboard' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' : 'text-gray-600 hover:bg-gray-100')}
+              >
+                <Shield className="w-5 h-5" /> Dept Dashboard
               </button>
             </>
           )}
@@ -1025,6 +1056,140 @@ export default function App() {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </motion.div>
+            )}
+
+            {view === 'dept_dashboard' && isOperator && (
+              <motion.div 
+                key="dept_dashboard"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="flex flex-col gap-6"
+              >
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900">{profile?.department} Dashboard</h2>
+                      <p className="text-sm text-gray-500">Manage overtime for your department staff.</p>
+                    </div>
+                    <div className="flex gap-4">
+                      <div className="text-right">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Staff</p>
+                        <p className="text-xl font-bold text-gray-900">{allUsers.length}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Pending Claims</p>
+                        <p className="text-xl font-bold text-yellow-600">{allClaims.filter(c => c.status === 'pending').length}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+                          <Users className="w-4 h-4" />
+                        </div>
+                        <span className="text-xs font-bold text-blue-800 uppercase tracking-wider">Staff List</span>
+                      </div>
+                      <p className="text-2xl font-bold text-blue-900">{allUsers.length}</p>
+                    </div>
+                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center text-emerald-600">
+                          <CheckCircle className="w-4 h-4" />
+                        </div>
+                        <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">Approved</span>
+                      </div>
+                      <p className="text-2xl font-bold text-emerald-900">{allClaims.filter(c => c.status === 'approved').length}</p>
+                    </div>
+                    <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center text-amber-600">
+                          <Clock className="w-4 h-4" />
+                        </div>
+                        <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">Total Hours</span>
+                      </div>
+                      <p className="text-2xl font-bold text-amber-900">
+                        {allClaims.reduce((sum, c) => sum + (c.totalHours || 0), 0).toFixed(1)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-gray-900">Recent Departmental Claims</h3>
+                    <button onClick={() => setView('form')} className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                      <Plus className="w-4 h-4" /> Create New
+                    </button>
+                  </div>
+
+                  {allClaims.length === 0 ? (
+                    <div className="bg-gray-50 p-12 rounded-2xl text-center border border-dashed border-gray-300 text-gray-400">
+                      No claims found for {profile?.department}.
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3 mb-8">
+                      {allClaims.map((claim) => (
+                        <div key={claim.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-gray-400 border border-gray-100">
+                              <UserIcon className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <p className="font-bold text-gray-900 text-sm">{claim.userName}</p>
+                              <p className="text-[10px] text-gray-500 uppercase tracking-wider">{claim.month} {claim.year}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-6">
+                            <div className="text-right">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Amount</p>
+                              <p className="text-sm font-bold text-emerald-600">Rs. {claim.totalAmount}</p>
+                            </div>
+                            <Badge variant={claim.status === 'approved' ? 'green' : claim.status === 'rejected' ? 'red' : 'yellow'}>
+                              {claim.status}
+                            </Badge>
+                            <div className="flex gap-1">
+                              <Button variant="outline" onClick={() => {
+                                const claimUser = allUsers.find(u => u.uid === claim.uid) || { 
+                                  name: claim.userName, 
+                                  designation: 'Staff', 
+                                  department: profile?.department || 'Bahria', 
+                                  payScale: '-', 
+                                  bankAccount: '-', 
+                                  bankName: '-' 
+                                };
+                                generateOvertimePDF(claimUser, claim);
+                              }} className="p-1.5 h-8 w-8" title="Download PDF">
+                                <Download className="w-4 h-4 text-red-500" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="pt-6 border-t border-gray-100">
+                    <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <Users className="w-5 h-5 text-blue-600" /> Department Staff ({allUsers.length})
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {allUsers.map(u => (
+                        <div key={u.uid} className="p-4 rounded-xl border border-gray-100 bg-white shadow-sm flex items-center justify-between">
+                          <div>
+                            <p className="font-bold text-gray-900">{u.name}</p>
+                            <p className="text-xs text-gray-500">{u.designation} • Scale {u.payScale}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Rate</p>
+                            <p className="text-xs font-bold text-gray-700">Rs. {u.weekdayRate}/hr</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             )}
