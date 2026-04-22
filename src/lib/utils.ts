@@ -30,6 +30,15 @@ export function getDayName(dateStr: string): string {
   return date.toLocaleDateString('en-US', { weekday: 'long' });
 }
 
+export function formatDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const y = date.getFullYear();
+  return `${d}-${m}-${y}`;
+}
+
 export function calculateHours(from: string, to: string): number {
   if (!from || !to) return 0;
   const [fromH, fromM] = from.split(':').map(Number);

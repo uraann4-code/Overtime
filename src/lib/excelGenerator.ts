@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { numberToWords } from './utils';
+import { numberToWords, formatDate } from './utils';
 
 export function generateOvertimeExcel(user: any, claim: any, returnBlob: boolean = false) {
   const u = user || {};
@@ -20,7 +20,7 @@ export function generateOvertimeExcel(user: any, claim: any, returnBlob: boolean
 
   // Prepare table data
   const tableData = (claim.entries || []).map((entry: any) => [
-    entry.date,
+    formatDate(entry.date),
     entry.isGazetted ? `${entry.day} (Gazetted)` : entry.day,
     entry.natureOfDuty,
     entry.fromTime,

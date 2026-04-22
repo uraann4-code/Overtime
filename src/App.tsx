@@ -4,7 +4,7 @@ import { onAuthStateChanged, User, createUserWithEmailAndPassword } from 'fireba
 import { doc, getDoc, setDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, deleteDoc, updateDoc, getDocFromCache, getDocFromServer } from 'firebase/firestore';
 import { Plus, Download, History, LogOut, User as UserIcon, FileText, Trash2, Calendar, Clock, DollarSign, Shield, Users, CheckCircle, XCircle, X, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn, getDayName, calculateHours, calculateAmount, numberToWords } from './lib/utils';
+import { cn, getDayName, formatDate, calculateHours, calculateAmount, numberToWords } from './lib/utils';
 import { generateOvertimePDF, generateSummaryPDF, SummaryRow } from './lib/pdfGenerator';
 import { generateOvertimeExcel } from './lib/excelGenerator';
 import JSZip from 'jszip';
@@ -1553,7 +1553,7 @@ export default function App() {
                             {selectedUserTimes.map((su, idx) => (
                               <tr key={`${su.uid}-${su.date}`} className="bg-white">
                                 <td className="px-4 py-3 font-medium text-blue-700">{su.name} <span className="text-xs text-gray-500 font-normal block">{su.designation}</span></td>
-                                <td className="px-4 py-3 font-medium text-gray-600">{su.date}</td>
+                                <td className="px-4 py-3 font-medium text-gray-600">{formatDate(su.date)}</td>
                                 <td className="px-4 py-3">
                                   <input type="time" className="w-full px-2 py-1 border rounded" value={su.fromTime} onChange={e => {
                                     const newArr = [...selectedUserTimes];

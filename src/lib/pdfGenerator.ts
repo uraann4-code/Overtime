@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { numberToWords } from './utils';
+import { numberToWords, formatDate } from './utils';
 
 export interface SummaryRow {
   srNo: number;
@@ -174,7 +174,7 @@ export function generateOvertimePDF(user: any, claim: any, returnBlob: boolean =
   
   // Table
   const tableData = (claim.entries || []).map((entry: any) => [
-    entry.date,
+    formatDate(entry.date),
     entry.isGazetted ? `${entry.day}\n(Gazetted)` : entry.day,
     entry.natureOfDuty,
     entry.fromTime,
