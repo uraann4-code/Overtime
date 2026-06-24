@@ -566,7 +566,7 @@ export default function App() {
             
             if (inKey && matchingRow[inKey]) {
               const rawIn = parseTime(matchingRow[inKey]);
-              if (rawIn) newFrom = roundTime(rawIn);
+              if (rawIn) newFrom = adjustStartTime(roundTime(rawIn), getDayName(su.date), !!su.isGazettedHoliday, !!su.isFridayFullDay);
             }
             if (outKey && matchingRow[outKey]) {
               const rawOut = parseTime(matchingRow[outKey]);
