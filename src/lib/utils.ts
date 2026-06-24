@@ -42,6 +42,7 @@ export function formatDate(dateStr: string): string {
 export function parseTime(timeStr: string | number): string {
   if (!timeStr && timeStr !== 0) return '';
   const str = String(timeStr).trim();
+  if (str.toUpperCase() === 'N/A') return '';
   
   // Handle standard HH:MM (with optional AM/PM)
   const match = str.match(/(\d{1,2}):(\d{2})/);
@@ -67,7 +68,9 @@ export function parseTime(timeStr: string | number): string {
 
 export function roundTime(timeStr: string): string {
   if (!timeStr) return '';
+  if (timeStr.toLowerCase().includes('n/a') || !timeStr.includes(':')) return 'N/A';
   let [h, m] = timeStr.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return 'N/A';
   if (m <= 15) m = 0;
   else if (m <= 45) m = 30;
   else {
@@ -79,7 +82,7 @@ export function roundTime(timeStr: string): string {
 }
 
 export function adjustStartTime(fromTime: string, dayName: string, isGazetted: boolean, isFridayFullDay: boolean = false): string {
-  if (!fromTime) return '';
+  if (!fromTime || fromTime === 'N/A') return 'N/A';
   let [fromH, fromM] = fromTime.split(':').map(Number);
   
   const isWeekend = dayName === 'Saturday' || dayName === 'Sunday';
@@ -98,7 +101,7 @@ export function adjustStartTime(fromTime: string, dayName: string, isGazetted: b
 }
 
 export function calculateHours(from: string, to: string): number {
-  if (!from || !to) return 0;
+  if (!from || !to || from === 'N/A' || to === 'N/A') return 0;
   const [fromH, fromM] = from.split(':').map(Number);
   const [toH, toM] = to.split(':').map(Number);
   

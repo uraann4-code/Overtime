@@ -565,18 +565,44 @@ export default function App() {
             let newTo = su.toTime;
             
             if (inKey && matchingRow[inKey]) {
-              const rawIn = parseTime(matchingRow[inKey]);
-              if (rawIn) newFrom = adjustStartTime(roundTime(rawIn), getDayName(su.date), !!su.isGazettedHoliday, !!su.isFridayFullDay);
+              const valIn = String(matchingRow[inKey]).trim();
+              if (valIn.toUpperCase() === 'N/A') {
+                newFrom = 'N/A';
+              } else {
+                const rawIn = parseTime(valIn);
+                if (rawIn) newFrom = adjustStartTime(roundTime(rawIn), getDayName(su.date), !!su.isGazettedHoliday, !!su.isFridayFullDay);
+              }
             }
             if (outKey && matchingRow[outKey]) {
-              const rawOut = parseTime(matchingRow[outKey]);
-              if (rawOut) newTo = roundTime(rawOut);
+              const valOut = String(matchingRow[outKey]).trim();
+              if (valOut.toUpperCase() === 'N/A') {
+                newTo = 'N/A';
+              } else {
+                const rawOut = parseTime(valOut);
+                if (rawOut) newTo = roundTime(rawOut);
+              }
             }
             
             if (newFrom !== su.fromTime || newTo !== su.toTime) matchCount++;
 
             return { ...su, fromTime: newFrom, toTime: newTo };
           }
+          
+          // Check if the file has any record for this user at all.
+          const userExistsInFile = data.some(row => {
+            const nameKey = Object.keys(row).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('employee') || k.toLowerCase().includes('user'));
+            if (!nameKey) return false;
+            const rowName = String(row[nameKey]).trim().toLowerCase();
+            return rowName === su.name.toLowerCase() || rowName.includes(su.name.toLowerCase()) || su.name.toLowerCase().includes(rowName);
+          });
+
+          // If the user is in the file but this specific date is missing, they were absent.
+          if (userExistsInFile) {
+            if (su.fromTime !== 'N/A' || su.toTime !== 'N/A') matchCount++;
+            return { ...su, fromTime: 'N/A', toTime: 'N/A' };
+          }
+          
+          // If the user isn't in the file at all, don't modify their times.
           return su;
         });
         
@@ -1686,14 +1712,14 @@ export default function App() {
                                 <td className="px-4 py-3 font-medium text-blue-700">{su.name} <span className="text-xs text-gray-500 font-normal block">{su.designation}</span></td>
                                 <td className="px-4 py-3 font-medium text-gray-600">{formatDate(su.date)}</td>
                                 <td className="px-4 py-3">
-                                  <input type="time" className="w-full px-2 py-1 border rounded" value={su.fromTime} onChange={e => {
+                                  <input type={su.fromTime === 'N/A' ? 'text' : 'time'} className="w-full px-2 py-1 border rounded" value={su.fromTime} onChange={e => {
                                     const newArr = [...selectedUserTimes];
                                     newArr[idx].fromTime = e.target.value;
                                     setSelectedUserTimes(newArr);
                                   }} />
                                 </td>
                                 <td className="px-4 py-3">
-                                  <input type="time" className="w-full px-2 py-1 border rounded" value={su.toTime} onChange={e => {
+                                  <input type={su.toTime === 'N/A' ? 'text' : 'time'} className="w-full px-2 py-1 border rounded" value={su.toTime} onChange={e => {
                                     const newArr = [...selectedUserTimes];
                                     newArr[idx].toTime = e.target.value;
                                     setSelectedUserTimes(newArr);
