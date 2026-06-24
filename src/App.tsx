@@ -4,7 +4,7 @@ import { onAuthStateChanged, User, createUserWithEmailAndPassword } from 'fireba
 import { doc, getDoc, setDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, deleteDoc, updateDoc, getDocFromCache, getDocFromServer } from 'firebase/firestore';
 import { Plus, Download, History, LogOut, User as UserIcon, FileText, Trash2, Calendar, Clock, DollarSign, Shield, Users, CheckCircle, XCircle, X, Copy, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn, getDayName, formatDate, parseTime, calculateHours, calculateAmount, numberToWords } from './lib/utils';
+import { cn, getDayName, formatDate, parseTime, calculateHours, calculateAmount, numberToWords, roundTime, adjustStartTime } from './lib/utils';
 import { generateOvertimePDF, generateSummaryPDF, SummaryRow } from './lib/pdfGenerator';
 import { generateOvertimeExcel } from './lib/excelGenerator';
 import JSZip from 'jszip';
@@ -565,10 +565,12 @@ export default function App() {
             let newTo = su.toTime;
             
             if (inKey && matchingRow[inKey]) {
-              newFrom = parseTime(matchingRow[inKey]) || su.fromTime;
+              const rawIn = parseTime(matchingRow[inKey]);
+              if (rawIn) newFrom = roundTime(rawIn);
             }
             if (outKey && matchingRow[outKey]) {
-              newTo = parseTime(matchingRow[outKey]) || su.toTime;
+              const rawOut = parseTime(matchingRow[outKey]);
+              if (rawOut) newTo = roundTime(rawOut);
             }
             
             if (newFrom !== su.fromTime || newTo !== su.toTime) matchCount++;
@@ -605,7 +607,13 @@ export default function App() {
     
     const newEntries: OvertimeEntry[] = selectedUserTimes.map(su => {
       const day = getDayName(su.date);
-      const hours = calculateHours(su.fromTime, su.toTime, day, !!su.isGazettedHoliday, !!su.isFridayFullDay);
+      
+      const roundedFrom = roundTime(su.fromTime);
+      const roundedTo = roundTime(su.toTime);
+      
+      const adjustedFrom = adjustStartTime(roundedFrom, day, !!su.isGazettedHoliday, !!su.isFridayFullDay);
+      
+      const hours = calculateHours(adjustedFrom, roundedTo);
       const selectedUser = allUsers.find(u => u.uid === su.uid);
       const rates = {
         weekday: selectedUser?.weekdayRate || 120,
@@ -620,8 +628,8 @@ export default function App() {
         date: su.date,
         day,
         natureOfDuty: newEntry.natureOfDuty || '',
-        fromTime: su.fromTime,
-        toTime: su.toTime,
+        fromTime: adjustedFrom,
+        toTime: roundedTo,
         hours,
         amount,
         isGazettedHoliday: !!su.isGazettedHoliday,

@@ -65,49 +65,63 @@ export function parseTime(timeStr: string | number): string {
   return str;
 }
 
-export function calculateHours(from: string, to: string, dayName: string, isGazetted: boolean, isFridayFullDay: boolean = false): number {
-  if (!from || !to) return 0;
-  let [fromH, fromM] = from.split(':').map(Number);
-  let [toH, toM] = to.split(':').map(Number);
-  
-  // Rule: Start time cannot be earlier than 08:30 AM
-  if (fromH < 8 || (fromH === 8 && fromM < 30)) {
-    fromH = 8;
-    fromM = 30;
+export function roundTime(timeStr: string): string {
+  if (!timeStr) return '';
+  let [h, m] = timeStr.split(':').map(Number);
+  if (m <= 15) m = 0;
+  else if (m <= 45) m = 30;
+  else {
+    m = 0;
+    h += 1;
   }
+  if (h >= 24) h = h - 24;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+export function adjustStartTime(fromTime: string, dayName: string, isGazetted: boolean, isFridayFullDay: boolean = false): string {
+  if (!fromTime) return '';
+  let [fromH, fromM] = fromTime.split(':').map(Number);
   
   const isWeekend = dayName === 'Saturday' || dayName === 'Sunday';
   const isWorkingDay = !isWeekend && !isGazetted && !(dayName === 'Friday' && isFridayFullDay);
   
-  // Rule: On working days, overtime starts from 18:30 (6:30 PM)
   if (isWorkingDay) {
     if (fromH < 18 || (fromH === 18 && fromM < 30)) {
-      fromH = 18;
-      fromM = 30;
+      return '18:30';
     }
-    
-    // If they finish before or exactly at 18:30, no overtime
-    if ((toH * 60 + toM) <= (18 * 60 + 30)) {
+  } else {
+    if (fromH < 8 || (fromH === 8 && fromM < 30)) {
+      return '08:30';
+    }
+  }
+  return fromTime;
+}
+
+export function calculateHours(from: string, to: string): number {
+  if (!from || !to) return 0;
+  const [fromH, fromM] = from.split(':').map(Number);
+  const [toH, toM] = to.split(':').map(Number);
+  
+  let diff = (toH * 60 + toM) - (fromH * 60 + fromM);
+  
+  // If diff is negative, it could be overnight (e.g., 22:00 to 02:00) 
+  // or it could be an invalid/no-overtime case (e.g., leaving at 17:00 when overtime starts at 18:30)
+  if (diff < 0) {
+    if (toH < 12) {
+      // Assuming overnight if toTime is in the morning (before 12 PM)
+      diff += 24 * 60;
+    } else {
+      // Otherwise, they just left early, no overtime.
       return 0;
     }
   }
-
-  let diff = (toH * 60 + toM) - (fromH * 60 + fromM);
-  if (diff < 0) diff += 24 * 60; // Handle overnight if needed
+  
+  if (diff === 0) return 0;
   
   const hours = Math.floor(diff / 60);
   const minutes = diff % 60;
   
-  let roundedMinutes = 0;
-  if (minutes <= 15) {
-    roundedMinutes = 0;
-  } else if (minutes <= 45) {
-    roundedMinutes = 30;
-  } else {
-    roundedMinutes = 60;
-  }
-  
-  return hours + (roundedMinutes / 60);
+  return hours + (minutes / 60);
 }
 
 export function calculateAmount(hours: number, day: string, isGazetted: boolean, rates: { weekday: number, weekend: number, holiday: number }): number {
