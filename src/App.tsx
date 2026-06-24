@@ -755,6 +755,24 @@ export default function App() {
     }
   };
 
+  const handleClearHistory = async () => {
+    if (!user) return;
+    if (!confirm("Are you sure you want to clear your entire history? This action cannot be undone.")) return;
+    
+    try {
+      const claimsToDelete = claims.filter(c => c.uid === user.uid);
+      for (const claim of claimsToDelete) {
+        if (claim.id) {
+          await deleteDoc(doc(db, 'claims', claim.id));
+        }
+      }
+      alert("History cleared successfully.");
+    } catch (error: any) {
+      console.error("Error clearing history:", error);
+      alert(`Failed to clear history. Error: ${error.message || error}`);
+    }
+  };
+
   const handleUpdateProfile = async () => {
     if (!user || !profile) return;
     await setDoc(doc(db, 'users', user.uid), profile);
@@ -1831,7 +1849,17 @@ export default function App() {
                 exit={{ opacity: 0, x: -20 }}
                 className="flex flex-col gap-4"
               >
-                <h2 className="text-xl font-bold mb-2">My Claim History</h2>
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-xl font-bold">My Claim History</h2>
+                  {claims.length > 0 && (
+                    <button
+                      onClick={handleClearHistory}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold hover:bg-red-100 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" /> Clear History
+                    </button>
+                  )}
+                </div>
                 {claims.length === 0 ? (
                   <div className="bg-white p-12 rounded-2xl text-center border border-dashed border-gray-300 text-gray-400">
                     No claims found.
