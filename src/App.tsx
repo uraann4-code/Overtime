@@ -40,6 +40,7 @@ interface OvertimeEntry {
   hours: number;
   amount: number;
   isGazettedHoliday: boolean;
+  isFridayFullDay?: boolean;
 }
 
 interface SelectedUserTime {
@@ -51,6 +52,7 @@ interface SelectedUserTime {
   fromTime: string;
   toTime: string;
   isGazettedHoliday?: boolean;
+  isFridayFullDay?: boolean;
 }
 
 interface OvertimeClaim {
@@ -527,9 +529,11 @@ export default function App() {
           const dateStr2 = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
           const dateStr3 = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
           const dateStr4 = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+          const dateStr5 = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`; // M/D/YYYY
+          const dateStr6 = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`; // D/M/YYYY
 
           const matchingRow = data.find(row => {
-            const nameKey = Object.keys(row).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('employee'));
+            const nameKey = Object.keys(row).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('employee') || k.toLowerCase().includes('user'));
             const dateKey = Object.keys(row).find(k => k.toLowerCase().includes('date') || k.toLowerCase() === 'day');
             
             if (!nameKey || !dateKey) return false;
@@ -538,7 +542,17 @@ export default function App() {
             const rowDate = String(row[dateKey]).trim();
             
             const isNameMatch = rowName === su.name.toLowerCase() || rowName.includes(su.name.toLowerCase()) || su.name.toLowerCase().includes(rowName);
-            const isDateMatch = rowDate === dateStr1 || rowDate === dateStr2 || rowDate === dateStr3 || rowDate === dateStr4 || rowDate.includes(dateStr2) || rowDate.includes(dateStr3);
+            
+            let isDateMatch = rowDate === dateStr1 || rowDate === dateStr2 || rowDate === dateStr3 || rowDate === dateStr4 || rowDate === dateStr5 || rowDate === dateStr6 || rowDate.includes(dateStr2) || rowDate.includes(dateStr3) || rowDate.includes(dateStr5) || rowDate.includes(dateStr6);
+            
+            if (!isDateMatch) {
+              const parsedRowDate = new Date(rowDate);
+              if (!isNaN(parsedRowDate.getTime())) {
+                isDateMatch = parsedRowDate.getFullYear() === d.getFullYear() && 
+                              parsedRowDate.getMonth() === d.getMonth() && 
+                              parsedRowDate.getDate() === d.getDate();
+              }
+            }
             
             return isNameMatch && isDateMatch;
           });
@@ -591,7 +605,7 @@ export default function App() {
     
     const newEntries: OvertimeEntry[] = selectedUserTimes.map(su => {
       const day = getDayName(su.date);
-      const hours = calculateHours(su.fromTime, su.toTime);
+      const hours = calculateHours(su.fromTime, su.toTime, day, !!su.isGazettedHoliday, !!su.isFridayFullDay);
       const selectedUser = allUsers.find(u => u.uid === su.uid);
       const rates = {
         weekday: selectedUser?.weekdayRate || 120,
@@ -610,7 +624,8 @@ export default function App() {
         toTime: su.toTime,
         hours,
         amount,
-        isGazettedHoliday: !!su.isGazettedHoliday
+        isGazettedHoliday: !!su.isGazettedHoliday,
+        isFridayFullDay: !!su.isFridayFullDay
       };
     });
     
@@ -1635,7 +1650,7 @@ export default function App() {
                               <th className="px-4 py-3 w-32">Date</th>
                               <th className="px-4 py-3 w-32">From Time</th>
                               <th className="px-4 py-3 w-32">To Time</th>
-                              <th className="px-4 py-3 w-24 text-center">Gazetted</th>
+                              <th className="px-4 py-3 w-40">Options</th>
                               <th className="px-4 py-3 w-20 text-right">Actions</th>
                             </tr>
                           </thead>
@@ -1658,17 +1673,37 @@ export default function App() {
                                     setSelectedUserTimes(newArr);
                                   }} />
                                 </td>
-                                <td className="px-4 py-3 text-center">
-                                  <input 
-                                    type="checkbox" 
-                                    checked={!!su.isGazettedHoliday} 
-                                    onChange={e => {
-                                      const newArr = [...selectedUserTimes];
-                                      newArr[idx].isGazettedHoliday = e.target.checked;
-                                      setSelectedUserTimes(newArr);
-                                    }}
-                                    className="w-4 h-4 text-blue-600 rounded"
-                                  />
+                                <td className="px-4 py-3">
+                                  <div className="flex flex-col gap-2">
+                                    <label className="flex items-center gap-2 text-xs">
+                                      <input 
+                                        type="checkbox" 
+                                        checked={!!su.isGazettedHoliday} 
+                                        onChange={e => {
+                                          const newArr = [...selectedUserTimes];
+                                          newArr[idx].isGazettedHoliday = e.target.checked;
+                                          setSelectedUserTimes(newArr);
+                                        }}
+                                        className="w-4 h-4 text-blue-600 rounded"
+                                      />
+                                      Gazetted
+                                    </label>
+                                    {getDayName(su.date) === 'Friday' && (
+                                      <label className="flex items-center gap-2 text-xs text-indigo-700 font-medium">
+                                        <input 
+                                          type="checkbox" 
+                                          checked={!!su.isFridayFullDay} 
+                                          onChange={e => {
+                                            const newArr = [...selectedUserTimes];
+                                            newArr[idx].isFridayFullDay = e.target.checked;
+                                            setSelectedUserTimes(newArr);
+                                          }}
+                                          className="w-4 h-4 text-indigo-600 rounded"
+                                        />
+                                        Full Day
+                                      </label>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="px-4 py-3 text-right">
                                   <div className="flex items-center justify-end gap-2">
@@ -1740,7 +1775,7 @@ export default function App() {
                                 <tr key={globalIdx} className="hover:bg-gray-50 transition-colors">
                                   <td className="px-4 py-3 font-bold text-blue-700">{entry.userName}</td>
                                   <td className="px-4 py-3 font-medium">{entry.date}</td>
-                                  <td className="px-4 py-3">{entry.day}</td>
+                                  <td className="px-4 py-3">{entry.day} {entry.isGazettedHoliday ? <span className="text-[10px] text-red-500 font-bold ml-1">(Gazetted)</span> : entry.isFridayFullDay ? <span className="text-[10px] text-indigo-500 font-bold ml-1">(Full Day)</span> : null}</td>
                                   <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{entry.natureOfDuty}</td>
                                   <td className="px-4 py-3 text-xs font-mono">{entry.fromTime} - {entry.toTime}</td>
                                   <td className="px-4 py-3 font-semibold">{entry.hours}</td>

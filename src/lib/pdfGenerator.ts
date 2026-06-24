@@ -175,7 +175,7 @@ export function generateOvertimePDF(user: any, claim: any, returnBlob: boolean =
   // Table
   const tableData = (claim.entries || []).map((entry: any) => [
     formatDate(entry.date),
-    entry.isGazetted ? `${entry.day}\n(Gazetted)` : entry.day,
+    entry.isGazettedHoliday ? `${entry.day}\n(Gazetted)` : entry.isFridayFullDay ? `${entry.day}\n(Full Day)` : entry.day,
     entry.natureOfDuty,
     entry.fromTime,
     entry.toTime,

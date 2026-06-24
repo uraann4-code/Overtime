@@ -65,13 +65,35 @@ export function parseTime(timeStr: string | number): string {
   return str;
 }
 
-export function calculateHours(from: string, to: string): number {
+export function calculateHours(from: string, to: string, dayName: string, isGazetted: boolean, isFridayFullDay: boolean = false): number {
   if (!from || !to) return 0;
-  const [fromH, fromM] = from.split(':').map(Number);
-  const [toH, toM] = to.split(':').map(Number);
+  let [fromH, fromM] = from.split(':').map(Number);
+  let [toH, toM] = to.split(':').map(Number);
   
+  // Rule: Start time cannot be earlier than 08:30 AM
+  if (fromH < 8 || (fromH === 8 && fromM < 30)) {
+    fromH = 8;
+    fromM = 30;
+  }
+  
+  const isWeekend = dayName === 'Saturday' || dayName === 'Sunday';
+  const isWorkingDay = !isWeekend && !isGazetted && !(dayName === 'Friday' && isFridayFullDay);
+  
+  // Rule: On working days, overtime starts from 18:30 (6:30 PM)
+  if (isWorkingDay) {
+    if (fromH < 18 || (fromH === 18 && fromM < 30)) {
+      fromH = 18;
+      fromM = 30;
+    }
+    
+    // If they finish before or exactly at 18:30, no overtime
+    if ((toH * 60 + toM) <= (18 * 60 + 30)) {
+      return 0;
+    }
+  }
+
   let diff = (toH * 60 + toM) - (fromH * 60 + fromM);
-  if (diff < 0) diff += 24 * 60; // Handle overnight if needed, though unlikely for OT
+  if (diff < 0) diff += 24 * 60; // Handle overnight if needed
   
   const hours = Math.floor(diff / 60);
   const minutes = diff % 60;

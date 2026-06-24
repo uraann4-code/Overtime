@@ -21,7 +21,7 @@ export function generateOvertimeExcel(user: any, claim: any, returnBlob: boolean
   // Prepare table data
   const tableData = (claim.entries || []).map((entry: any) => [
     formatDate(entry.date),
-    entry.isGazetted ? `${entry.day} (Gazetted)` : entry.day,
+    entry.isGazettedHoliday ? `${entry.day} (Gazetted)` : entry.isFridayFullDay ? `${entry.day} (Full Day)` : entry.day,
     entry.natureOfDuty,
     entry.fromTime,
     entry.toTime,
