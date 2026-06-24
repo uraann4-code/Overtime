@@ -39,6 +39,32 @@ export function formatDate(dateStr: string): string {
   return `${d}-${m}-${y}`;
 }
 
+export function parseTime(timeStr: string | number): string {
+  if (!timeStr && timeStr !== 0) return '';
+  const str = String(timeStr).trim();
+  
+  // Handle standard HH:MM (with optional AM/PM)
+  const match = str.match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    let hours = parseInt(match[1]);
+    const mins = match[2];
+    if (str.toLowerCase().includes('pm') && hours < 12) hours += 12;
+    if (str.toLowerCase().includes('am') && hours === 12) hours = 0;
+    return `${String(hours).padStart(2, '0')}:${mins}`;
+  }
+  
+  // Handle decimal from Excel (fraction of a day)
+  const num = Number(str);
+  if (!isNaN(num) && num >= 0 && num < 1) {
+    const totalMinutes = Math.round(num * 24 * 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+  }
+  
+  return str;
+}
+
 export function calculateHours(from: string, to: string): number {
   if (!from || !to) return 0;
   const [fromH, fromM] = from.split(':').map(Number);

@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { auth, db, loginWithEmail, logout } from './firebase';
 import { onAuthStateChanged, User, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, deleteDoc, updateDoc, getDocFromCache, getDocFromServer } from 'firebase/firestore';
-import { Plus, Download, History, LogOut, User as UserIcon, FileText, Trash2, Calendar, Clock, DollarSign, Shield, Users, CheckCircle, XCircle, X, Copy } from 'lucide-react';
+import { Plus, Download, History, LogOut, User as UserIcon, FileText, Trash2, Calendar, Clock, DollarSign, Shield, Users, CheckCircle, XCircle, X, Copy, Upload } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn, getDayName, formatDate, calculateHours, calculateAmount, numberToWords } from './lib/utils';
+import { cn, getDayName, formatDate, parseTime, calculateHours, calculateAmount, numberToWords } from './lib/utils';
 import { generateOvertimePDF, generateSummaryPDF, SummaryRow } from './lib/pdfGenerator';
 import { generateOvertimeExcel } from './lib/excelGenerator';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import * as XLSX from 'xlsx';
 
 const ADMIN_EMAIL = "uraann4@gmail.com";
 
@@ -504,6 +505,75 @@ export default function App() {
     
     setFromDate('');
     setToDate('');
+  };
+
+  const handleAttendanceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json<any>(ws, { raw: false });
+
+        let matchCount = 0;
+        const updatedTimes = selectedUserTimes.map(su => {
+          const d = new Date(su.date);
+          const dateStr1 = su.date; // YYYY-MM-DD
+          const dateStr2 = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+          const dateStr3 = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+          const dateStr4 = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+
+          const matchingRow = data.find(row => {
+            const nameKey = Object.keys(row).find(k => k.toLowerCase().includes('name') || k.toLowerCase().includes('employee'));
+            const dateKey = Object.keys(row).find(k => k.toLowerCase().includes('date') || k.toLowerCase() === 'day');
+            
+            if (!nameKey || !dateKey) return false;
+            
+            const rowName = String(row[nameKey]).trim().toLowerCase();
+            const rowDate = String(row[dateKey]).trim();
+            
+            const isNameMatch = rowName === su.name.toLowerCase() || rowName.includes(su.name.toLowerCase()) || su.name.toLowerCase().includes(rowName);
+            const isDateMatch = rowDate === dateStr1 || rowDate === dateStr2 || rowDate === dateStr3 || rowDate === dateStr4 || rowDate.includes(dateStr2) || rowDate.includes(dateStr3);
+            
+            return isNameMatch && isDateMatch;
+          });
+
+          if (matchingRow) {
+            const inKey = Object.keys(matchingRow).find(k => k.toLowerCase().includes('in') || k.toLowerCase() === 'from');
+            const outKey = Object.keys(matchingRow).find(k => k.toLowerCase().includes('out') || k.toLowerCase() === 'to');
+            
+            let newFrom = su.fromTime;
+            let newTo = su.toTime;
+            
+            if (inKey && matchingRow[inKey]) {
+              newFrom = parseTime(matchingRow[inKey]) || su.fromTime;
+            }
+            if (outKey && matchingRow[outKey]) {
+              newTo = parseTime(matchingRow[outKey]) || su.toTime;
+            }
+            
+            if (newFrom !== su.fromTime || newTo !== su.toTime) matchCount++;
+
+            return { ...su, fromTime: newFrom, toTime: newTo };
+          }
+          return su;
+        });
+        
+        setSelectedUserTimes(updatedTimes);
+        alert(`Attendance log processed! Autofilled ${matchCount} records.`);
+      } catch (error) {
+        console.error("Error parsing file", error);
+        alert("Error parsing attendance file. Please make sure it's a valid Excel or CSV.");
+      }
+    };
+    reader.readAsBinaryString(file);
+    // Reset input
+    e.target.value = '';
   };
 
   const handleAddEntry = () => {
@@ -1537,8 +1607,28 @@ export default function App() {
                     </div>
 
                     {selectedUserTimes.length > 0 && (
-                      <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
-                        <table className="w-full text-sm text-left">
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-bold text-gray-700">Set Timings</h4>
+                          <div className="flex items-center gap-3">
+                            <input 
+                              type="file" 
+                              accept=".xlsx, .xls, .csv" 
+                              id="attendance-upload" 
+                              className="hidden" 
+                              onChange={handleAttendanceUpload} 
+                            />
+                            <label 
+                              htmlFor="attendance-upload" 
+                              className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-sm font-bold cursor-pointer hover:bg-indigo-100 transition-colors"
+                            >
+                              <Upload className="w-4 h-4" /> Autofill from Log
+                            </label>
+                            <button onClick={() => setSelectedUserTimes([])} className="text-sm font-medium text-red-600 hover:text-red-700">Clear All</button>
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
+                          <table className="w-full text-sm text-left">
                           <thead className="bg-gray-100 text-gray-600 uppercase text-xs font-bold">
                             <tr>
                               <th className="px-4 py-3">User</th>
@@ -1611,6 +1701,7 @@ export default function App() {
                             ))}
                           </tbody>
                         </table>
+                      </div>
                       </div>
                     )}
                   </div>
